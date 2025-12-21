@@ -14,11 +14,13 @@ readme = "README.md"
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+native-tls = "0.2"
 futures-util = "0.3"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+simd-json = "0.14"
 
 # Error handling
 thiserror = "1.0"

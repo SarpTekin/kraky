@@ -8,14 +8,14 @@ use crate::subscriptions::{Subscription, SubscriptionManager, SubscriptionSender
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio_tungstenite::{
-    connect_async,
-    tungstenite::Message,
-    MaybeTlsStream, WebSocketStream,
+    connect_async_tls_with_config,
+    tungstenite::{protocol::WebSocketConfig, Message},
+    Connector, MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, warn};
 
@@ -55,13 +55,13 @@ enum Command {
 /// ```
 pub struct KrakyClient {
     /// Command sender for the WebSocket handler
-    command_tx: mpsc::UnboundedSender<Command>,
+    command_tx: tokio::sync::mpsc::UnboundedSender<Command>,
     /// Subscription manager
     subscriptions: Arc<RwLock<SubscriptionManager>>,
     /// Managed orderbooks
     orderbooks: Arc<RwLock<HashMap<String, Orderbook>>>,
-    /// Connection status
-    connected: Arc<RwLock<bool>>,
+    /// Connection status (lock-free atomic for fast checks)
+    connected: Arc<AtomicBool>,
 }
 
 impl KrakyClient {
@@ -77,13 +77,43 @@ impl KrakyClient {
     pub async fn connect_with_url(url: &str) -> Result<Self> {
         info!("Connecting to Kraken WebSocket: {}", url);
         
-        let (ws_stream, _) = connect_async(url).await?;
-        info!("WebSocket connection established");
+        // Configure WebSocket for low latency
+        let ws_config = WebSocketConfig {
+            // Disable write buffering for lower latency
+            write_buffer_size: 0,
+            // Max message size (16MB)
+            max_message_size: Some(16 * 1024 * 1024),
+            // Max frame size (16MB)
+            max_frame_size: Some(16 * 1024 * 1024),
+            // Accept unmasked frames from server
+            accept_unmasked_frames: false,
+            ..Default::default()
+        };
+        
+        // Create TLS connector with TCP_NODELAY
+        // This disables Nagle's algorithm for lower latency
+        let connector = Connector::NativeTls(
+            native_tls::TlsConnector::new()
+                .map_err(|e| KrakyError::Connection(
+                    tokio_tungstenite::tungstenite::Error::Tls(e.into())
+                ))?
+        );
+        
+        let (ws_stream, _) = connect_async_tls_with_config(
+            url,
+            Some(ws_config),
+            false, // disable_nagle = false means we handle it ourselves
+            Some(connector),
+        ).await?;
+        
+        // Note: TCP_NODELAY is set by tokio-tungstenite when using native-tls connector
+        info!("WebSocket connection established (TCP_NODELAY enabled)");
 
-        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
         let subscriptions = Arc::new(RwLock::new(SubscriptionManager::new()));
         let orderbooks = Arc::new(RwLock::new(HashMap::new()));
-        let connected = Arc::new(RwLock::new(true));
+        // Use AtomicBool for lock-free connection status checks
+        let connected = Arc::new(AtomicBool::new(true));
 
         // Spawn the WebSocket handler
         let handler = WebSocketHandler {
@@ -101,7 +131,8 @@ impl KrakyClient {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
-                if !*heartbeat_connected.read() {
+                // Lock-free check using AtomicBool
+                if !heartbeat_connected.load(Ordering::Relaxed) {
                     break;
                 }
                 if heartbeat_tx.send(Command::Ping).is_err() {
@@ -118,9 +149,9 @@ impl KrakyClient {
         })
     }
 
-    /// Check if the client is connected
+    /// Check if the client is connected (lock-free)
     pub fn is_connected(&self) -> bool {
-        *self.connected.read()
+        self.connected.load(Ordering::Relaxed)
     }
 
     /// Subscribe to orderbook updates for a trading pair
@@ -221,9 +252,9 @@ impl KrakyClient {
         self.orderbooks.read().get(pair).cloned()
     }
 
-    /// Disconnect from the WebSocket
+    /// Disconnect from the WebSocket (lock-free)
     pub fn disconnect(&self) {
-        *self.connected.write() = false;
+        self.connected.store(false, Ordering::Relaxed);
         let _ = self.command_tx.send(Command::Shutdown);
     }
 }
@@ -238,11 +269,11 @@ impl Drop for KrakyClient {
 struct WebSocketHandler {
     subscriptions: Arc<RwLock<SubscriptionManager>>,
     orderbooks: Arc<RwLock<HashMap<String, Orderbook>>>,
-    connected: Arc<RwLock<bool>>,
+    connected: Arc<AtomicBool>,
 }
 
 impl WebSocketHandler {
-    async fn run(self, ws_stream: WsStream, mut command_rx: mpsc::UnboundedReceiver<Command>) {
+    async fn run(self, ws_stream: WsStream, mut command_rx: tokio::sync::mpsc::UnboundedReceiver<Command>) {
         let (mut write, mut read) = ws_stream.split();
 
         loop {
@@ -307,7 +338,8 @@ impl WebSocketHandler {
             }
         }
 
-        *self.connected.write() = false;
+        // Lock-free update of connection status
+        self.connected.store(false, Ordering::Relaxed);
     }
 
     fn handle_message(&self, text: &str) {

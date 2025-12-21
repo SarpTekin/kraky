@@ -18,3 +18,4 @@
 # Documentation (keep local only)
 ARCHITECTURE.md
 docs/*.md
+benchmark_*.txt

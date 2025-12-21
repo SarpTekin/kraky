@@ -241,9 +241,16 @@ pub enum KrakyMessage {
 }
 
 impl KrakyMessage {
-    /// Parse a raw JSON message
+    /// Parse a raw JSON message using SIMD-accelerated parsing when available
     pub fn parse(text: &str) -> Result<Self, serde_json::Error> {
-        let value: serde_json::Value = serde_json::from_str(text)?;
+        // Use SIMD-accelerated JSON parsing for better performance
+        // simd-json requires mutable bytes, so we copy the input
+        let mut bytes = text.as_bytes().to_vec();
+        let value: serde_json::Value = simd_json::from_slice(&mut bytes)
+            .map_err(|e| serde_json::Error::io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                e.to_string()
+            )))?;
         
         // Check for method responses (pong, subscribe, unsubscribe)
         if let Some(method) = value.get("method").and_then(|m| m.as_str()) {
