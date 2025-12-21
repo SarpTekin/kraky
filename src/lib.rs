@@ -11,6 +11,7 @@
 //! - OHLC (candlestick) data
 //! - Automatic heartbeat handling
 //! - Clean async/await API
+//! - **Backpressure control** with configurable buffer sizes
 //! 
 //! ## Quick Start
 //! 
@@ -67,5 +68,5 @@ pub use models::{
     Interval, Orderbook, OrderbookSnapshot, OrderbookUpdate,
     OHLC, Ticker, Trade, TradeSide,
 };
-pub use subscriptions::Subscription;
+pub use subscriptions::{Subscription, SubscriptionStats, BackpressureConfig, DEFAULT_BUFFER_SIZE};
 

@@ -13,6 +13,7 @@ A lightweight, high-performance Rust SDK for connecting to the [Kraken Exchange]
 - **Async/Await**: Built on Tokio for efficient async I/O
 - **Zero-copy Parsing**: Efficient JSON deserialization with Serde
 - **Automatic Reconnection**: Built-in heartbeat handling
+- **Backpressure Control**: Bounded channels prevent memory issues with slow consumers
 
 ## Installation
 
@@ -282,7 +283,28 @@ The SDK is designed for low-latency market data processing:
 - **Zero-copy where possible**: Efficient memory usage
 - **Async I/O**: Non-blocking network operations
 - **Managed state**: Pre-computed orderbook metrics
-- **Bounded channels**: Backpressure handling for slow consumers
+- **Backpressure control**: Bounded channels prevent memory issues
+
+### Backpressure Monitoring
+
+Subscriptions use bounded channels (default: 1000 messages). If your consumer is too slow, older messages are dropped to keep the latest data. Monitor backpressure with:
+
+```rust
+let mut trades = client.subscribe_trades("BTC/USD").await?;
+
+// Process messages...
+while let Some(trade) = trades.next().await {
+    // Your processing logic
+}
+
+// Check stats
+let stats = trades.stats();
+println!("Delivered: {}, Dropped: {}, Drop rate: {:.2}%", 
+    stats.delivered(), 
+    stats.dropped(), 
+    stats.drop_rate()
+);
+```
 
 ## Documentation
 
