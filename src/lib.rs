@@ -62,7 +62,7 @@ pub mod models;
 pub mod subscriptions;
 
 // Re-export main types
-pub use client::KrakyClient;
+pub use client::{KrakyClient, ConnectionState, ReconnectConfig};
 pub use error::{KrakyError, KrakenApiError, KrakenSeverity, KrakenCategory, Result};
 pub use models::{
     Interval, Orderbook, OrderbookSnapshot, OrderbookUpdate,

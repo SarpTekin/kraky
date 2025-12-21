@@ -110,6 +110,7 @@ Backpressure stats (delivered / dropped / drop rate):
 - **Real-time Market Data**: Stream orderbook, trades, tickers, and OHLC candles
 - **Managed Orderbook State**: Automatic reconstruction from incremental updates
 - **Orderbook Imbalance Detection**: Built-in bullish/bearish signal generation
+- **Smart Reconnection**: Automatic reconnection with exponential backoff
 - **Type-safe API**: Strongly typed models for all Kraken message types
 - **Async/Await**: Built on Tokio for efficient async I/O
 - **Zero-copy Parsing**: Efficient JSON deserialization with Serde
@@ -430,6 +431,73 @@ if let Some(ob) = client.get_orderbook("BTC/USD") {
 | `imbalance_within_depth(pct)` | Imbalance within % of mid price |
 | `imbalance_metrics()` | Detailed metrics (volumes, ratio, signal) |
 
+## Smart Reconnection
+
+The SDK automatically reconnects when the connection drops, with configurable exponential backoff:
+
+```rust
+use kraky::{KrakyClient, ReconnectConfig};
+
+// Default: automatic reconnection with exponential backoff
+let client = KrakyClient::connect().await?;
+
+// Aggressive reconnection (for low-latency needs)
+let client = KrakyClient::connect_with_reconnect(ReconnectConfig::aggressive()).await?;
+
+// Conservative reconnection (to avoid rate limiting)
+let client = KrakyClient::connect_with_reconnect(ReconnectConfig::conservative()).await?;
+
+// Disable reconnection
+let client = KrakyClient::connect_with_reconnect(ReconnectConfig::disabled()).await?;
+
+// Custom configuration
+let config = ReconnectConfig {
+    enabled: true,
+    initial_delay: Duration::from_millis(200),
+    max_delay: Duration::from_secs(10),
+    backoff_multiplier: 1.5,
+    max_attempts: Some(20),
+};
+let client = KrakyClient::connect_with_reconnect(config).await?;
+```
+
+### Connection State
+
+Monitor connection state programmatically:
+
+```rust
+use kraky::ConnectionState;
+
+// Check connection status
+if client.is_connected() {
+    println!("Connected!");
+}
+
+if client.is_reconnecting() {
+    println!("Reconnecting...");
+}
+
+// Get detailed state
+match client.connection_state() {
+    ConnectionState::Connected => println!("Ready"),
+    ConnectionState::Reconnecting => println!("Reconnecting..."),
+    ConnectionState::Connecting => println!("Initial connection..."),
+    ConnectionState::Disconnected => println!("Disconnected"),
+}
+
+// Manually trigger reconnection
+client.reconnect()?;
+```
+
+### Reconnect Presets
+
+| Preset | Initial Delay | Max Delay | Backoff | Max Attempts |
+|--------|---------------|-----------|---------|--------------|
+| `default()` | 500ms | 30s | 2.0x | Unlimited |
+| `aggressive()` | 100ms | 5s | 1.5x | Unlimited |
+| `conservative()` | 1s | 60s | 2.0x | 10 |
+| `disabled()` | - | - | - | 0 |
+
 ## Backpressure Monitoring
 
 Subscriptions use bounded channels (default: 1000 messages). If your consumer is too slow, older messages are dropped to keep the latest data:
@@ -480,10 +548,11 @@ The SDK is designed for low-latency market data processing:
 cargo test
 ```
 
-**19 tests** covering:
-- Orderbook operations (9 tests)
+**29 tests** covering:
+- Orderbook operations (13 tests) - including imbalance detection
 - Subscription handling (4 tests)
 - Error parsing (6 tests)
+- Reconnection logic (6 tests)
 
 ## License
 
