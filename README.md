@@ -21,7 +21,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kraky = "0.1.0"
+kraky = { git = "https://github.com/SarpTekin/kraky" }
 tokio = { version = "1.35", features = ["full"] }
 ```
 
@@ -305,11 +305,6 @@ println!("Delivered: {}, Dropped: {}, Drop rate: {:.2}%",
     stats.drop_rate()
 );
 ```
-
-## Documentation
-
-- **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Complete tutorial with examples
-- **[Architecture](ARCHITECTURE.md)** - Internal design and code walkthrough
 
 ## License
 
