@@ -1,0 +1,20 @@
+# Build artifacts
+/target
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Cargo
+**/*.rs.bk
+
+# Environment
+.env
+.env.local
+
+# Documentation (keep local only)
+ARCHITECTURE.md
+docs/*.md

@@ -1,0 +1,58 @@
+[package]
+name = "kraky"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Kraken Forge Hackathon"]
+description = "A lightweight Rust SDK for Kraken Exchange WebSocket API"
+repository = "https://github.com/sarptekin/kraky"
+keywords = ["kraken", "exchange", "websocket", "trading", "crypto"]
+categories = ["api-bindings", "asynchronous"]
+readme = "README.md"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Utilities
+url = "2.5"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+parking_lot = "0.12"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+tokio-test = "0.4"
+
+[[example]]
+name = "orderbook"
+path = "examples/orderbook.rs"
+
+[[example]]
+name = "trades"
+path = "examples/trades.rs"
+
+[[example]]
+name = "ticker"
+path = "examples/ticker.rs"
+
+[[example]]
+name = "ohlc"
+path = "examples/ohlc.rs"
+
+[[example]]
+name = "multi_subscribe"
+path = "examples/multi_subscribe.rs"
