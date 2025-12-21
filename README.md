@@ -21,7 +21,7 @@ A lightweight, high-performance Rust SDK for connecting to the [Kraken Exchange]
 git clone https://github.com/SarpTekin/kraky.git
 cd kraky
 
-# Run all tests (19 tests)
+# Run all tests (29 tests)
 cargo test
 
 # ⭐ RECOMMENDED: Run the comprehensive demo (shows all features)
