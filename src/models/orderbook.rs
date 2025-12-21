@@ -260,6 +260,150 @@ impl Orderbook {
             _ => None,
         }
     }
+
+    /// Calculate total bid volume
+    pub fn total_bid_volume(&self) -> f64 {
+        self.bids.values().sum()
+    }
+
+    /// Calculate total ask volume
+    pub fn total_ask_volume(&self) -> f64 {
+        self.asks.values().sum()
+    }
+
+    /// Calculate orderbook imbalance ratio
+    /// 
+    /// Returns a value between -1.0 and 1.0:
+    /// - Positive values indicate more bid pressure (bullish)
+    /// - Negative values indicate more ask pressure (bearish)
+    /// - 0.0 indicates balanced orderbook
+    /// 
+    /// Formula: (bid_volume - ask_volume) / (bid_volume + ask_volume)
+    pub fn imbalance(&self) -> f64 {
+        let bid_vol = self.total_bid_volume();
+        let ask_vol = self.total_ask_volume();
+        let total = bid_vol + ask_vol;
+        
+        if total == 0.0 {
+            return 0.0;
+        }
+        
+        (bid_vol - ask_vol) / total
+    }
+
+    /// Calculate imbalance for top N levels only
+    /// 
+    /// This is often more useful as it focuses on the most liquid
+    /// levels near the spread where actual trading happens.
+    pub fn imbalance_top_n(&self, n: usize) -> f64 {
+        let bid_vol: f64 = self.bids.iter().rev().take(n).map(|(_, qty)| qty).sum();
+        let ask_vol: f64 = self.asks.iter().take(n).map(|(_, qty)| qty).sum();
+        let total = bid_vol + ask_vol;
+        
+        if total == 0.0 {
+            return 0.0;
+        }
+        
+        (bid_vol - ask_vol) / total
+    }
+
+    /// Calculate volume-weighted imbalance within a price range
+    /// 
+    /// `depth_percent` specifies how far from mid price to include (e.g., 0.01 = 1%)
+    pub fn imbalance_within_depth(&self, depth_percent: f64) -> Option<f64> {
+        let mid = self.mid_price()?;
+        let lower_bound = mid * (1.0 - depth_percent);
+        let upper_bound = mid * (1.0 + depth_percent);
+        
+        let bid_vol: f64 = self.bids
+            .iter()
+            .filter(|(price, _)| price.0 >= lower_bound)
+            .map(|(_, qty)| qty)
+            .sum();
+        
+        let ask_vol: f64 = self.asks
+            .iter()
+            .filter(|(price, _)| price.0 <= upper_bound)
+            .map(|(_, qty)| qty)
+            .sum();
+        
+        let total = bid_vol + ask_vol;
+        
+        if total == 0.0 {
+            return Some(0.0);
+        }
+        
+        Some((bid_vol - ask_vol) / total)
+    }
+
+    /// Get detailed imbalance metrics
+    pub fn imbalance_metrics(&self) -> ImbalanceMetrics {
+        let bid_vol = self.total_bid_volume();
+        let ask_vol = self.total_ask_volume();
+        let total = bid_vol + ask_vol;
+        
+        ImbalanceMetrics {
+            bid_volume: bid_vol,
+            ask_volume: ask_vol,
+            imbalance_ratio: if total > 0.0 { (bid_vol - ask_vol) / total } else { 0.0 },
+            bid_ask_ratio: if ask_vol > 0.0 { bid_vol / ask_vol } else { f64::INFINITY },
+            bid_levels: self.bids.len(),
+            ask_levels: self.asks.len(),
+        }
+    }
+}
+
+/// Detailed orderbook imbalance metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImbalanceMetrics {
+    /// Total bid volume
+    pub bid_volume: f64,
+    /// Total ask volume
+    pub ask_volume: f64,
+    /// Imbalance ratio (-1.0 to 1.0)
+    pub imbalance_ratio: f64,
+    /// Bid/Ask volume ratio
+    pub bid_ask_ratio: f64,
+    /// Number of bid price levels
+    pub bid_levels: usize,
+    /// Number of ask price levels
+    pub ask_levels: usize,
+}
+
+impl ImbalanceMetrics {
+    /// Returns true if there's significant buy pressure (imbalance > threshold)
+    pub fn is_bullish(&self, threshold: f64) -> bool {
+        self.imbalance_ratio > threshold
+    }
+
+    /// Returns true if there's significant sell pressure (imbalance < -threshold)
+    pub fn is_bearish(&self, threshold: f64) -> bool {
+        self.imbalance_ratio < -threshold
+    }
+
+    /// Returns a simple signal based on imbalance
+    /// 
+    /// - `threshold`: minimum absolute imbalance to generate a signal (e.g., 0.1 = 10%)
+    pub fn signal(&self, threshold: f64) -> ImbalanceSignal {
+        if self.imbalance_ratio > threshold {
+            ImbalanceSignal::Bullish
+        } else if self.imbalance_ratio < -threshold {
+            ImbalanceSignal::Bearish
+        } else {
+            ImbalanceSignal::Neutral
+        }
+    }
+}
+
+/// Simple signal derived from orderbook imbalance
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ImbalanceSignal {
+    /// More bid volume than ask volume
+    Bullish,
+    /// More ask volume than bid volume
+    Bearish,
+    /// Balanced orderbook
+    Neutral,
 }
 
 /// Orderbook snapshot for time-travel feature
@@ -477,6 +621,123 @@ mod tests {
         let level_str: PriceLevelRaw = serde_json::from_str(json_str).unwrap();
         assert_eq!(level_str.price, 49999.99);
         assert_eq!(level_str.qty, 2.5);
+    }
+
+    #[test]
+    fn test_orderbook_imbalance_bullish() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        // More bid volume than ask volume = bullish
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 5.0 },
+                PriceLevelRaw { price: 49900.0, qty: 5.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 2.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        // Bid volume = 10, Ask volume = 2
+        // Imbalance = (10 - 2) / (10 + 2) = 8 / 12 = 0.666...
+        let imbalance = ob.imbalance();
+        assert!(imbalance > 0.0, "Imbalance should be positive (bullish)");
+        assert!((imbalance - 0.666666).abs() < 0.001);
+        
+        let metrics = ob.imbalance_metrics();
+        assert_eq!(metrics.bid_volume, 10.0);
+        assert_eq!(metrics.ask_volume, 2.0);
+        assert_eq!(metrics.signal(0.1), ImbalanceSignal::Bullish);
+    }
+
+    #[test]
+    fn test_orderbook_imbalance_bearish() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        // More ask volume than bid volume = bearish
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 1.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 4.0 },
+                PriceLevelRaw { price: 50200.0, qty: 4.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        // Bid volume = 1, Ask volume = 8
+        // Imbalance = (1 - 8) / (1 + 8) = -7/9 = -0.777...
+        let imbalance = ob.imbalance();
+        assert!(imbalance < 0.0, "Imbalance should be negative (bearish)");
+        assert!((imbalance - (-0.777777)).abs() < 0.001);
+        
+        let metrics = ob.imbalance_metrics();
+        assert_eq!(metrics.signal(0.1), ImbalanceSignal::Bearish);
+    }
+
+    #[test]
+    fn test_orderbook_imbalance_neutral() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        // Equal bid and ask volume = neutral
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 5.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 5.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        assert_eq!(ob.imbalance(), 0.0);
+        let metrics = ob.imbalance_metrics();
+        assert_eq!(metrics.signal(0.1), ImbalanceSignal::Neutral);
+    }
+
+    #[test]
+    fn test_orderbook_imbalance_top_n() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 10.0 }, // Top 1: heavy bid
+                PriceLevelRaw { price: 49900.0, qty: 1.0 },
+                PriceLevelRaw { price: 49800.0, qty: 1.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 2.0 }, // Top 1: light ask
+                PriceLevelRaw { price: 50200.0, qty: 10.0 },
+                PriceLevelRaw { price: 50300.0, qty: 10.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        // Full orderbook: bids=12, asks=22 -> bearish
+        assert!(ob.imbalance() < 0.0);
+        
+        // Top 1 only: bids=10, asks=2 -> bullish
+        let top1_imbalance = ob.imbalance_top_n(1);
+        assert!(top1_imbalance > 0.0);
+        assert!((top1_imbalance - 0.666666).abs() < 0.001);
     }
 }
 

@@ -6,6 +6,7 @@
 //! Features demonstrated:
 //! - WebSocket connection to Kraken
 //! - Orderbook subscription with managed state
+//! - **Orderbook imbalance detection** (bullish/bearish signals)
 //! - Trade subscription
 //! - Ticker subscription
 //! - Backpressure monitoring
@@ -23,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("\n╔══════════════════════════════════════════════════════════════╗");
-    println!("║           🐙 KRAKY SDK DEMO - Kraken Forge Hackathon          ║");
+    println!("║           🐙 KRAKY SDK DEMO - Kraken Forge Hackathon         ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -165,6 +166,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   │  Mid Price: ${:<21.2} │", mid);
             }
             println!("   └─────────────────────────────────────┘");
+        }
+
+        // Show orderbook imbalance analysis
+        println!("\n═══════════════════════════════════════════════════════════════");
+        println!("                    ORDERBOOK IMBALANCE");
+        println!("═══════════════════════════════════════════════════════════════\n");
+
+        let metrics = ob.imbalance_metrics();
+        let signal = metrics.signal(0.1);
+        let signal_emoji = match signal {
+            kraky::ImbalanceSignal::Bullish => "🟢 BULLISH",
+            kraky::ImbalanceSignal::Bearish => "🔴 BEARISH",
+            kraky::ImbalanceSignal::Neutral => "⚪ NEUTRAL",
+        };
+
+        println!("   Full Orderbook Analysis:");
+        println!("   ┌─────────────────────────────────────┐");
+        println!("   │  Bid Volume:   {:<18.4} BTC │", metrics.bid_volume);
+        println!("   │  Ask Volume:   {:<18.4} BTC │", metrics.ask_volume);
+        println!("   │  Bid/Ask Ratio: {:<17.4}   │", metrics.bid_ask_ratio);
+        println!("   │  Imbalance:     {:>+17.2}%   │", metrics.imbalance_ratio * 100.0);
+        println!("   │  Signal:       {:<18}  │", signal_emoji);
+        println!("   └─────────────────────────────────────┘");
+
+        // Top-of-book imbalance (most actionable)
+        let top5_imbalance = ob.imbalance_top_n(5);
+        let top5_signal = if top5_imbalance > 0.1 { "🟢" } else if top5_imbalance < -0.1 { "🔴" } else { "⚪" };
+        println!("\n   Top 5 Levels Imbalance: {:>+.2}% {}", top5_imbalance * 100.0, top5_signal);
+        
+        // Imbalance within 0.5% of mid price (tight spread)
+        if let Some(tight_imbalance) = ob.imbalance_within_depth(0.005) {
+            let tight_signal = if tight_imbalance > 0.1 { "🟢" } else if tight_imbalance < -0.1 { "🔴" } else { "⚪" };
+            println!("   Within 0.5% of Mid:     {:>+.2}% {}", tight_imbalance * 100.0, tight_signal);
         }
     }
 

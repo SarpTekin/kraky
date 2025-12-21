@@ -67,6 +67,7 @@ pub use error::{KrakyError, KrakenApiError, KrakenSeverity, KrakenCategory, Resu
 pub use models::{
     Interval, Orderbook, OrderbookSnapshot, OrderbookUpdate,
     OHLC, Ticker, Trade, TradeSide,
+    ImbalanceMetrics, ImbalanceSignal,
 };
 pub use subscriptions::{Subscription, SubscriptionStats, BackpressureConfig, DEFAULT_BUFFER_SIZE};
 

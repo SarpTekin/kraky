@@ -71,6 +71,22 @@ Backpressure stats (delivered / dropped / drop rate):
    💱 Trades:    23 / 0 / 0.00%
    📈 Ticker:    12 / 0 / 0.00%
 
+═══════════════════════════════════════════════════════════════
+                    ORDERBOOK IMBALANCE
+═══════════════════════════════════════════════════════════════
+
+   Full Orderbook Analysis:
+   ┌─────────────────────────────────────┐
+   │  Bid Volume:   12.3456 BTC          │
+   │  Ask Volume:   8.7654 BTC           │
+   │  Bid/Ask Ratio: 1.41                │
+   │  Imbalance:     +17.02%             │
+   │  Signal:       🟢 BULLISH           │
+   └─────────────────────────────────────┘
+
+   Top 5 Levels Imbalance: +23.45% 🟢
+   Within 0.5% of Mid:     +12.34% 🟢
+
 ╔══════════════════════════════════════════════════════════════╗
 ║                    🎉 DEMO COMPLETE!                          ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -93,6 +109,7 @@ Backpressure stats (delivered / dropped / drop rate):
 
 - **Real-time Market Data**: Stream orderbook, trades, tickers, and OHLC candles
 - **Managed Orderbook State**: Automatic reconstruction from incremental updates
+- **Orderbook Imbalance Detection**: Built-in bullish/bearish signal generation
 - **Type-safe API**: Strongly typed models for all Kraken message types
 - **Async/Await**: Built on Tokio for efficient async I/O
 - **Zero-copy Parsing**: Efficient JSON deserialization with Serde
@@ -304,12 +321,19 @@ pub struct Orderbook {
 }
 
 impl Orderbook {
+    // Price methods
     pub fn best_bid(&self) -> Option<f64>;
     pub fn best_ask(&self) -> Option<f64>;
     pub fn spread(&self) -> Option<f64>;
     pub fn mid_price(&self) -> Option<f64>;
     pub fn top_bids(&self, n: usize) -> Vec<PriceLevel>;
     pub fn top_asks(&self, n: usize) -> Vec<PriceLevel>;
+    
+    // Imbalance detection
+    pub fn imbalance(&self) -> f64;                           // Full book (-1.0 to 1.0)
+    pub fn imbalance_top_n(&self, n: usize) -> f64;           // Top N levels only
+    pub fn imbalance_within_depth(&self, pct: f64) -> Option<f64>; // Within % of mid
+    pub fn imbalance_metrics(&self) -> ImbalanceMetrics;      // Full metrics
 }
 ```
 
@@ -362,6 +386,49 @@ pub struct OHLC {
     pub timestamp: String,
 }
 ```
+
+## Orderbook Imbalance Detection
+
+The SDK provides built-in orderbook imbalance calculations for detecting buy/sell pressure:
+
+```rust
+if let Some(ob) = client.get_orderbook("BTC/USD") {
+    // Simple imbalance (-1.0 to 1.0)
+    // Positive = more bids (bullish), Negative = more asks (bearish)
+    let imbalance = ob.imbalance();
+    println!("Imbalance: {:+.2}%", imbalance * 100.0);
+    
+    // Top-of-book imbalance (most actionable for trading)
+    let top5_imbalance = ob.imbalance_top_n(5);
+    
+    // Imbalance within 0.5% of mid price
+    if let Some(tight) = ob.imbalance_within_depth(0.005) {
+        println!("Tight spread imbalance: {:+.2}%", tight * 100.0);
+    }
+    
+    // Full metrics with signals
+    let metrics = ob.imbalance_metrics();
+    println!("Bid Volume: {:.4} BTC", metrics.bid_volume);
+    println!("Ask Volume: {:.4} BTC", metrics.ask_volume);
+    println!("Bid/Ask Ratio: {:.2}", metrics.bid_ask_ratio);
+    
+    // Generate trading signals
+    match metrics.signal(0.1) {  // 10% threshold
+        ImbalanceSignal::Bullish => println!("🟢 BULLISH - more buy pressure"),
+        ImbalanceSignal::Bearish => println!("🔴 BEARISH - more sell pressure"),
+        ImbalanceSignal::Neutral => println!("⚪ NEUTRAL - balanced"),
+    }
+}
+```
+
+### Imbalance Metrics
+
+| Method | Description |
+|--------|-------------|
+| `imbalance()` | Full orderbook imbalance (-1.0 to 1.0) |
+| `imbalance_top_n(n)` | Imbalance of top N levels only |
+| `imbalance_within_depth(pct)` | Imbalance within % of mid price |
+| `imbalance_metrics()` | Detailed metrics (volumes, ratio, signal) |
 
 ## Backpressure Monitoring
 
