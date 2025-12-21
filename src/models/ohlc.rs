@@ -2,45 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Deserialize a number that might come as a string or a number
-fn deserialize_number<'de, D>(deserializer: D) -> Result<f64, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::{self, Visitor};
-
-    struct NumberVisitor;
-
-    impl<'de> Visitor<'de> for NumberVisitor {
-        type Value = f64;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a number or string representation of a number")
-        }
-
-        fn visit_f64<E>(self, value: f64) -> Result<f64, E> {
-            Ok(value)
-        }
-
-        fn visit_i64<E>(self, value: i64) -> Result<f64, E> {
-            Ok(value as f64)
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<f64, E> {
-            Ok(value as f64)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<f64, E>
-        where
-            E: de::Error,
-        {
-            value.parse::<f64>().map_err(de::Error::custom)
-        }
-    }
-
-    deserializer.deserialize_any(NumberVisitor)
-}
-
 /// OHLC time interval
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Interval {
@@ -128,27 +89,66 @@ pub struct OHLC {
     pub interval_begin: String,
 }
 
+/// Deserialize a value that could be either a number or a string representation of a number
+fn deserialize_number<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct NumberVisitor;
+    
+    impl<'de> Visitor<'de> for NumberVisitor {
+        type Value = f64;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a number or string representation of a number")
+        }
+        
+        fn visit_f64<E>(self, value: f64) -> Result<f64, E> {
+            Ok(value)
+        }
+        
+        fn visit_i64<E>(self, value: i64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+        
+        fn visit_u64<E>(self, value: u64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+        
+        fn visit_str<E>(self, value: &str) -> Result<f64, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<f64>().map_err(de::Error::custom)
+        }
+    }
+    
+    deserializer.deserialize_any(NumberVisitor)
+}
+
 /// Raw OHLC data from Kraken API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OHLCDataRaw {
     /// Trading pair symbol
     pub symbol: String,
-    /// Open price (can be string or number from API)
+    /// Open price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub open: f64,
-    /// High price (can be string or number from API)
+    /// High price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub high: f64,
-    /// Low price (can be string or number from API)
+    /// Low price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub low: f64,
-    /// Close price (can be string or number from API)
+    /// Close price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub close: f64,
-    /// Volume weighted average price (can be string or number from API)
+    /// Volume weighted average price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub vwap: f64,
-    /// Volume (can be string or number from API)
+    /// Volume (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub volume: f64,
     /// Number of trades

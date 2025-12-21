@@ -2,34 +2,34 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Deserialize a number that might come as a string or a number
+/// Deserialize a value that could be either a number or a string representation of a number
 fn deserialize_number<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     use serde::de::{self, Visitor};
-
+    
     struct NumberVisitor;
-
+    
     impl<'de> Visitor<'de> for NumberVisitor {
         type Value = f64;
-
+        
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a number or string representation of a number")
         }
-
+        
         fn visit_f64<E>(self, value: f64) -> Result<f64, E> {
             Ok(value)
         }
-
+        
         fn visit_i64<E>(self, value: i64) -> Result<f64, E> {
             Ok(value as f64)
         }
-
+        
         fn visit_u64<E>(self, value: u64) -> Result<f64, E> {
             Ok(value as f64)
         }
-
+        
         fn visit_str<E>(self, value: &str) -> Result<f64, E>
         where
             E: de::Error,
@@ -37,7 +37,7 @@ where
             value.parse::<f64>().map_err(de::Error::custom)
         }
     }
-
+    
     deserializer.deserialize_any(NumberVisitor)
 }
 
@@ -96,10 +96,10 @@ pub struct TradeDataRaw {
     pub symbol: String,
     /// Trade side
     pub side: TradeSide,
-    /// Price (can be string or number from API)
+    /// Price (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub price: f64,
-    /// Quantity (can be string or number from API)
+    /// Quantity (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub qty: f64,
     /// Order type
