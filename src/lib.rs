@@ -63,7 +63,7 @@ pub mod subscriptions;
 
 // Re-export main types
 pub use client::KrakyClient;
-pub use error::{KrakyError, Result};
+pub use error::{KrakyError, KrakenApiError, KrakenSeverity, KrakenCategory, Result};
 pub use models::{
     Interval, Orderbook, OrderbookSnapshot, OrderbookUpdate,
     OHLC, Ticker, Trade, TradeSide,

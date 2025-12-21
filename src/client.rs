@@ -330,8 +330,29 @@ impl WebSocketHandler {
                 KrakyMessage::SubscriptionStatus { success, channel, symbol, error } => {
                     if success {
                         info!("Subscribed to {} for {:?}", channel, symbol);
+                    } else if let Some(err_str) = error {
+                        // Parse Kraken error for better diagnostics
+                        let parsed = crate::error::KrakenApiError::parse(&err_str);
+                        if parsed.is_retryable() {
+                            warn!(
+                                "Subscription failed for {} (retryable): [{}:{}] {}",
+                                channel, parsed.severity, parsed.category, parsed.message
+                            );
+                        } else if parsed.is_invalid_pair() {
+                            error!(
+                                "Invalid trading pair for {}: {}",
+                                channel, parsed.message
+                            );
+                        } else if parsed.is_rate_limited() {
+                            warn!("Rate limited on {} subscription", channel);
+                        } else {
+                            warn!(
+                                "Subscription failed for {}: [{}:{}] {}",
+                                channel, parsed.severity, parsed.category, parsed.message
+                            );
+                        }
                     } else {
-                        warn!("Subscription failed for {}: {:?}", channel, error);
+                        warn!("Subscription failed for {}: unknown error", channel);
                     }
                 }
                 KrakyMessage::Orderbook(update) => {
