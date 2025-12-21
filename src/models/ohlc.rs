@@ -2,6 +2,45 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Deserialize a number that might come as a string or a number
+fn deserialize_number<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct NumberVisitor;
+
+    impl<'de> Visitor<'de> for NumberVisitor {
+        type Value = f64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a number or string representation of a number")
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<f64, E> {
+            Ok(value)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<f64, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<f64>().map_err(de::Error::custom)
+        }
+    }
+
+    deserializer.deserialize_any(NumberVisitor)
+}
+
 /// OHLC time interval
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Interval {
@@ -94,18 +133,24 @@ pub struct OHLC {
 pub struct OHLCDataRaw {
     /// Trading pair symbol
     pub symbol: String,
-    /// Open price
-    pub open: String,
-    /// High price
-    pub high: String,
-    /// Low price
-    pub low: String,
-    /// Close price
-    pub close: String,
-    /// Volume weighted average price
-    pub vwap: String,
-    /// Volume
-    pub volume: String,
+    /// Open price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub open: f64,
+    /// High price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub high: f64,
+    /// Low price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub low: f64,
+    /// Close price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub close: f64,
+    /// Volume weighted average price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub vwap: f64,
+    /// Volume (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub volume: f64,
     /// Number of trades
     pub count: i64,
     /// Interval in minutes
@@ -122,12 +167,12 @@ impl OHLCDataRaw {
     pub fn to_ohlc(&self) -> OHLC {
         OHLC {
             symbol: self.symbol.clone(),
-            open: self.open.parse().unwrap_or(0.0),
-            high: self.high.parse().unwrap_or(0.0),
-            low: self.low.parse().unwrap_or(0.0),
-            close: self.close.parse().unwrap_or(0.0),
-            vwap: self.vwap.parse().unwrap_or(0.0),
-            volume: self.volume.parse().unwrap_or(0.0),
+            open: self.open,
+            high: self.high,
+            low: self.low,
+            close: self.close,
+            vwap: self.vwap,
+            volume: self.volume,
             count: self.count,
             interval: self.interval,
             timestamp: self.timestamp.clone(),
@@ -148,4 +193,3 @@ pub struct OHLCUpdate {
     /// OHLC data
     pub data: Vec<OHLCDataRaw>,
 }
-

@@ -2,6 +2,45 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Deserialize a number that might come as a string or a number
+fn deserialize_number<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+
+    struct NumberVisitor;
+
+    impl<'de> Visitor<'de> for NumberVisitor {
+        type Value = f64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a number or string representation of a number")
+        }
+
+        fn visit_f64<E>(self, value: f64) -> Result<f64, E> {
+            Ok(value)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<f64, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<f64>().map_err(de::Error::custom)
+        }
+    }
+
+    deserializer.deserialize_any(NumberVisitor)
+}
+
 /// Ticker information for a trading pair
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ticker {
@@ -36,28 +75,39 @@ pub struct Ticker {
 pub struct TickerDataRaw {
     /// Trading pair symbol
     pub symbol: String,
-    /// Best bid price
-    pub bid: String,
-    /// Best bid quantity
-    pub bid_qty: String,
-    /// Best ask price
-    pub ask: String,
-    /// Best ask quantity
-    pub ask_qty: String,
-    /// Last trade price
-    pub last: String,
-    /// 24h volume
-    pub volume: String,
-    /// 24h volume weighted average price
-    pub vwap: String,
-    /// 24h low price
-    pub low: String,
-    /// 24h high price
-    pub high: String,
-    /// 24h price change
-    pub change: String,
-    /// 24h price change percentage
-    pub change_pct: String,
+    /// Best bid price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub bid: f64,
+    /// Best bid quantity (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub bid_qty: f64,
+    /// Best ask price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub ask: f64,
+    /// Best ask quantity (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub ask_qty: f64,
+    /// Last trade price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub last: f64,
+    /// 24h volume (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub volume: f64,
+    /// 24h volume weighted average price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub vwap: f64,
+    /// 24h low price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub low: f64,
+    /// 24h high price (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub high: f64,
+    /// 24h price change (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub change: f64,
+    /// 24h price change percentage (can be string or number from API)
+    #[serde(deserialize_with = "deserialize_number")]
+    pub change_pct: f64,
 }
 
 impl TickerDataRaw {
@@ -65,17 +115,17 @@ impl TickerDataRaw {
     pub fn to_ticker(&self) -> Ticker {
         Ticker {
             symbol: self.symbol.clone(),
-            bid: self.bid.parse().unwrap_or(0.0),
-            bid_qty: self.bid_qty.parse().unwrap_or(0.0),
-            ask: self.ask.parse().unwrap_or(0.0),
-            ask_qty: self.ask_qty.parse().unwrap_or(0.0),
-            last: self.last.parse().unwrap_or(0.0),
-            volume: self.volume.parse().unwrap_or(0.0),
-            vwap: self.vwap.parse().unwrap_or(0.0),
-            low: self.low.parse().unwrap_or(0.0),
-            high: self.high.parse().unwrap_or(0.0),
-            change: self.change.parse().unwrap_or(0.0),
-            change_pct: self.change_pct.parse().unwrap_or(0.0),
+            bid: self.bid,
+            bid_qty: self.bid_qty,
+            ask: self.ask,
+            ask_qty: self.ask_qty,
+            last: self.last,
+            volume: self.volume,
+            vwap: self.vwap,
+            low: self.low,
+            high: self.high,
+            change: self.change,
+            change_pct: self.change_pct,
         }
     }
 }
@@ -92,4 +142,3 @@ pub struct TickerUpdate {
     /// Ticker data
     pub data: Vec<TickerDataRaw>,
 }
-
