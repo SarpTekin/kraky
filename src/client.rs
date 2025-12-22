@@ -12,12 +12,30 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use tokio_tungstenite::{
     connect_async_tls_with_config,
     tungstenite::{protocol::WebSocketConfig, Message},
     Connector, MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, warn};
+
+/// Connection event emitted by the client
+#[derive(Debug, Clone)]
+pub enum ConnectionEvent {
+    /// Successfully connected
+    Connected,
+    /// Disconnected (with optional reason)
+    Disconnected(Option<String>),
+    /// Attempting to reconnect (attempt number)
+    Reconnecting(u32),
+    /// Reconnection successful
+    Reconnected,
+    /// Reconnection failed (attempt number, error message)
+    ReconnectFailed(u32, String),
+    /// Max reconnection attempts reached
+    ReconnectExhausted,
+}
 
 /// Connection state for the WebSocket client
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +192,8 @@ pub struct KrakyClient {
     url: Arc<String>,
     /// Shutdown flag
     shutdown: Arc<AtomicBool>,
+    /// Connection event broadcaster
+    event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>>,
 }
 
 impl KrakyClient {
@@ -205,6 +225,7 @@ impl KrakyClient {
         let subscriptions = Arc::new(RwLock::new(SubscriptionManager::new()));
         let orderbooks = Arc::new(RwLock::new(HashMap::new()));
         let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
+        let event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>> = Arc::new(RwLock::new(None));
 
         // Initial connection
         let ws_stream = Self::create_connection(&url).await?;
@@ -220,6 +241,7 @@ impl KrakyClient {
             stored_subscriptions: Arc::clone(&stored_subscriptions),
             url: Arc::clone(&url),
             shutdown: Arc::clone(&shutdown),
+            event_tx: Arc::clone(&event_tx),
         };
         
         tokio::spawn(manager.run(ws_stream, command_rx));
@@ -237,8 +259,8 @@ impl KrakyClient {
                 }
                 let current_state = ConnectionState::from(heartbeat_state.load(Ordering::Relaxed));
                 if current_state == ConnectionState::Connected {
-                if heartbeat_tx.send(Command::Ping).is_err() {
-                    break;
+                    if heartbeat_tx.send(Command::Ping).is_err() {
+                        break;
                     }
                 }
             }
@@ -253,6 +275,7 @@ impl KrakyClient {
             stored_subscriptions,
             url,
             shutdown,
+            event_tx,
         })
     }
 
@@ -309,6 +332,36 @@ impl KrakyClient {
     /// Get the WebSocket URL this client is connected to
     pub fn url(&self) -> &str {
         &self.url
+    }
+
+    /// Subscribe to connection events
+    /// 
+    /// Returns a receiver that will receive connection state changes.
+    /// Only one subscriber is supported at a time; calling this again
+    /// replaces the previous subscriber.
+    /// 
+    /// # Example
+    /// 
+    /// ```ignore
+    /// let mut events = client.subscribe_events();
+    /// 
+    /// tokio::spawn(async move {
+    ///     while let Some(event) = events.recv().await {
+    ///         match event {
+    ///             ConnectionEvent::Connected => println!("Connected!"),
+    ///             ConnectionEvent::Disconnected(reason) => println!("Lost: {:?}", reason),
+    ///             ConnectionEvent::Reconnecting(n) => println!("Reconnecting #{}", n),
+    ///             ConnectionEvent::Reconnected => println!("Reconnected!"),
+    ///             ConnectionEvent::ReconnectFailed(n, e) => println!("Failed #{}: {}", n, e),
+    ///             ConnectionEvent::ReconnectExhausted => println!("Gave up reconnecting"),
+    ///         }
+    ///     }
+    /// });
+    /// ```
+    pub fn subscribe_events(&self) -> mpsc::Receiver<ConnectionEvent> {
+        let (tx, rx) = mpsc::channel(100);
+        *self.event_tx.write() = Some(tx);
+        rx
     }
 
     /// Subscribe to orderbook updates for a trading pair
@@ -523,9 +576,18 @@ struct ConnectionManager {
     stored_subscriptions: Arc<RwLock<Vec<StoredSubscription>>>,
     url: Arc<String>,
     shutdown: Arc<AtomicBool>,
+    event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>>,
 }
 
 impl ConnectionManager {
+    /// Emit a connection event to subscribers
+    fn emit_event(&self, event: ConnectionEvent) {
+        if let Some(tx) = self.event_tx.read().as_ref() {
+            // Use try_send to avoid blocking; drop event if channel is full
+            let _ = tx.try_send(event);
+        }
+    }
+
     async fn run(
         self,
         initial_stream: WsStream,
@@ -534,11 +596,15 @@ impl ConnectionManager {
         let mut ws_stream = Some(initial_stream);
         let mut reconnect_attempt = 0u32;
         let mut pending_commands: Vec<Command> = Vec::new();
+        
+        // Emit initial connected event
+        self.emit_event(ConnectionEvent::Connected);
 
         loop {
             // Check shutdown flag
             if self.shutdown.load(Ordering::Relaxed) {
                 info!("Connection manager shutting down");
+                self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown requested".to_string())));
                 break;
             }
 
@@ -550,24 +616,34 @@ impl ConnectionManager {
                     &mut pending_commands,
                 ).await;
 
-                match disconnect_reason {
+                let disconnect_msg = match &disconnect_reason {
                     DisconnectReason::Shutdown => {
                         info!("WebSocket handler shut down");
+                        self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown".to_string())));
                         break;
                     }
                     DisconnectReason::ServerClose => {
                         warn!("Server closed connection");
+                        Some("Server closed connection".to_string())
                     }
                     DisconnectReason::Error(e) => {
                         error!("WebSocket error: {}", e);
+                        Some(e.clone())
                     }
                     DisconnectReason::StreamEnded => {
                         warn!("WebSocket stream ended unexpectedly");
+                        Some("Stream ended".to_string())
                     }
                     DisconnectReason::ManualReconnect => {
                         info!("Manual reconnection requested");
                         reconnect_attempt = 0; // Reset attempts for manual reconnect
+                        None
                     }
+                };
+
+                // Emit disconnect event (unless it's a manual reconnect)
+                if disconnect_msg.is_some() {
+                    self.emit_event(ConnectionEvent::Disconnected(disconnect_msg));
                 }
 
                 // Should we reconnect?
@@ -580,6 +656,7 @@ impl ConnectionManager {
                 if let Some(max) = self.reconnect_config.max_attempts {
                     if reconnect_attempt >= max {
                         error!("Max reconnection attempts ({}) reached, giving up", max);
+                        self.emit_event(ConnectionEvent::ReconnectExhausted);
                         self.state.store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
                         break;
                     }
@@ -587,6 +664,7 @@ impl ConnectionManager {
 
                 // Attempt reconnection
                 self.state.store(ConnectionState::Reconnecting as u8, Ordering::SeqCst);
+                self.emit_event(ConnectionEvent::Reconnecting(reconnect_attempt + 1));
                 
                 let delay = self.reconnect_config.delay_for_attempt(reconnect_attempt);
                 info!(
@@ -600,6 +678,7 @@ impl ConnectionManager {
 
                 // Check shutdown again after sleep
                 if self.shutdown.load(Ordering::Relaxed) {
+                    self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown during reconnect".to_string())));
                     break;
                 }
 
@@ -607,6 +686,7 @@ impl ConnectionManager {
                     Ok(new_stream) => {
                         info!("Reconnection successful!");
                         self.state.store(ConnectionState::Connected as u8, Ordering::SeqCst);
+                        self.emit_event(ConnectionEvent::Reconnected);
                         reconnect_attempt = 0;
                         ws_stream = Some(new_stream);
 
@@ -614,7 +694,9 @@ impl ConnectionManager {
                         self.resubscribe_all(&mut pending_commands);
                     }
                     Err(e) => {
-                        warn!("Reconnection attempt {} failed: {}", reconnect_attempt + 1, e);
+                        let err_msg = e.to_string();
+                        warn!("Reconnection attempt {} failed: {}", reconnect_attempt + 1, err_msg);
+                        self.emit_event(ConnectionEvent::ReconnectFailed(reconnect_attempt + 1, err_msg));
                         reconnect_attempt += 1;
                         ws_stream = None;
                     }

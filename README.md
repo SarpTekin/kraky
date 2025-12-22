@@ -112,6 +112,7 @@ Backpressure stats (delivered / dropped / drop rate):
 - **Orderbook Imbalance Detection**: Built-in bullish/bearish signal generation
 - **Orderbook Checksum Validation**: CRC32 validation to detect data corruption
 - **Smart Reconnection**: Automatic reconnection with exponential backoff
+- **Connection Events**: Subscribe to connect/disconnect/reconnect lifecycle events
 - **Type-safe API**: Strongly typed models for all Kraken message types
 - **Async/Await**: Built on Tokio for efficient async I/O
 - **Zero-copy Parsing**: Efficient JSON deserialization with Serde
@@ -532,6 +533,38 @@ client.reconnect()?;
 | `aggressive()` | 100ms | 5s | 1.5x | Unlimited |
 | `conservative()` | 1s | 60s | 2.0x | 10 |
 | `disabled()` | - | - | - | 0 |
+
+### Connection Events
+
+Subscribe to connection lifecycle events for monitoring and logging:
+
+```rust
+use kraky::ConnectionEvent;
+
+let mut events = client.subscribe_events();
+
+tokio::spawn(async move {
+    while let Some(event) = events.recv().await {
+        match event {
+            ConnectionEvent::Connected => println!("✅ Connected"),
+            ConnectionEvent::Disconnected(reason) => println!("❌ Disconnected: {:?}", reason),
+            ConnectionEvent::Reconnecting(n) => println!("🔄 Reconnecting (attempt #{})", n),
+            ConnectionEvent::Reconnected => println!("✅ Reconnected"),
+            ConnectionEvent::ReconnectFailed(n, e) => println!("⚠️ Attempt #{} failed: {}", n, e),
+            ConnectionEvent::ReconnectExhausted => println!("💀 Max attempts reached"),
+        }
+    }
+});
+```
+
+| Event | Description |
+|-------|-------------|
+| `Connected` | Initial connection successful |
+| `Disconnected(reason)` | Connection lost |
+| `Reconnecting(attempt)` | Starting reconnection attempt |
+| `Reconnected` | Reconnection successful |
+| `ReconnectFailed(attempt, error)` | Reconnection attempt failed |
+| `ReconnectExhausted` | Max attempts reached, giving up |
 
 ## Backpressure Monitoring
 
