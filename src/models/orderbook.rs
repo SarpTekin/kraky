@@ -140,6 +140,16 @@ pub struct Orderbook {
     pub timestamp: String,
     /// Sequence number for ordering
     pub sequence: u64,
+    /// Last checksum from Kraken (for validation)
+    #[serde(default)]
+    pub last_checksum: u32,
+    /// Whether the last checksum validation passed
+    #[serde(default = "default_checksum_valid")]
+    pub checksum_valid: bool,
+}
+
+fn default_checksum_valid() -> bool {
+    true
 }
 
 /// Wrapper for f64 that implements Ord for use in BTreeMap
@@ -181,6 +191,8 @@ impl Orderbook {
             asks: BTreeMap::new(),
             timestamp: String::new(),
             sequence: 0,
+            last_checksum: 0,
+            checksum_valid: true,
         }
     }
 
@@ -206,6 +218,25 @@ impl Orderbook {
                 self.asks.insert(OrderedFloat(level.price), level.qty);
             }
         }
+
+        // Validate checksum if provided
+        if data.checksum != 0 {
+            self.last_checksum = data.checksum;
+            self.checksum_valid = self.validate_checksum(data.checksum);
+        }
+    }
+
+    /// Apply an update and return whether the checksum is valid
+    /// 
+    /// Use this instead of `apply_update` when you want to handle
+    /// checksum failures explicitly.
+    /// 
+    /// # Returns
+    /// 
+    /// `true` if the checksum is valid (or not provided), `false` if corrupted.
+    pub fn apply_update_validated(&mut self, data: &OrderbookData) -> bool {
+        self.apply_update(data);
+        self.checksum_valid
     }
 
     /// Get top N bid levels (highest prices first)
@@ -351,6 +382,86 @@ impl Orderbook {
             ask_levels: self.asks.len(),
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CHECKSUM VALIDATION
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Calculate the CRC32 checksum of the orderbook
+    /// 
+    /// Kraken's checksum algorithm:
+    /// 1. Take top 10 asks (sorted ascending) and top 10 bids (sorted descending)
+    /// 2. For each level: format price and qty by removing decimal point and leading zeros
+    /// 3. Concatenate: asks first (price+qty for each), then bids
+    /// 4. Calculate CRC32 of the resulting string
+    pub fn calculate_checksum(&self) -> u32 {
+        let mut data = String::new();
+        
+        // Top 10 asks (lowest prices first - ascending order)
+        for (price, qty) in self.asks.iter().take(10) {
+            data.push_str(&Self::format_for_checksum(price.0));
+            data.push_str(&Self::format_for_checksum(*qty));
+        }
+        
+        // Top 10 bids (highest prices first - descending order)
+        for (price, qty) in self.bids.iter().rev().take(10) {
+            data.push_str(&Self::format_for_checksum(price.0));
+            data.push_str(&Self::format_for_checksum(*qty));
+        }
+        
+        crc32fast::hash(data.as_bytes())
+    }
+
+    /// Validate the orderbook against an expected checksum
+    /// 
+    /// Returns `true` if the checksum matches, `false` if corrupted.
+    /// 
+    /// # Example
+    /// 
+    /// ```ignore
+    /// if !orderbook.validate_checksum(expected_checksum) {
+    ///     // Orderbook is corrupted, trigger reconnect for fresh snapshot
+    ///     client.reconnect()?;
+    /// }
+    /// ```
+    pub fn validate_checksum(&self, expected: u32) -> bool {
+        self.calculate_checksum() == expected
+    }
+
+    /// Validate checksum and return detailed result
+    pub fn checksum_validation(&self, expected: u32) -> ChecksumValidation {
+        let calculated = self.calculate_checksum();
+        ChecksumValidation {
+            expected,
+            calculated,
+            valid: expected == calculated,
+            bid_count: self.bids.len(),
+            ask_count: self.asks.len(),
+        }
+    }
+
+    /// Format a number for checksum calculation
+    /// 
+    /// Removes decimal point and leading zeros.
+    /// Example: 0.00123400 -> "123400", 50000.0 -> "500000"
+    fn format_for_checksum(value: f64) -> String {
+        // Format with enough precision to capture all significant digits
+        let formatted = format!("{:.10}", value);
+        
+        // Remove the decimal point
+        let without_decimal = formatted.replace('.', "");
+        
+        // Remove leading zeros
+        let trimmed = without_decimal.trim_start_matches('0');
+        
+        // If all zeros, return "0"
+        if trimmed.is_empty() {
+            "0".to_string()
+        } else {
+            // Also remove trailing zeros after we've removed the decimal
+            trimmed.trim_end_matches('0').to_string()
+        }
+    }
 }
 
 /// Detailed orderbook imbalance metrics
@@ -404,6 +515,47 @@ pub enum ImbalanceSignal {
     Bearish,
     /// Balanced orderbook
     Neutral,
+}
+
+/// Result of checksum validation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChecksumValidation {
+    /// Expected checksum from Kraken
+    pub expected: u32,
+    /// Calculated checksum from local orderbook
+    pub calculated: u32,
+    /// Whether the checksums match
+    pub valid: bool,
+    /// Number of bid levels in the orderbook
+    pub bid_count: usize,
+    /// Number of ask levels in the orderbook
+    pub ask_count: usize,
+}
+
+impl ChecksumValidation {
+    /// Returns true if the orderbook data is valid (checksums match)
+    pub fn is_valid(&self) -> bool {
+        self.valid
+    }
+
+    /// Returns true if the orderbook might be corrupted
+    pub fn is_corrupted(&self) -> bool {
+        !self.valid
+    }
+}
+
+impl std::fmt::Display for ChecksumValidation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.valid {
+            write!(f, "✓ Checksum valid (0x{:08X})", self.expected)
+        } else {
+            write!(
+                f,
+                "✗ Checksum mismatch: expected 0x{:08X}, got 0x{:08X}",
+                self.expected, self.calculated
+            )
+        }
+    }
 }
 
 /// Orderbook snapshot for time-travel feature
@@ -738,6 +890,150 @@ mod tests {
         let top1_imbalance = ob.imbalance_top_n(1);
         assert!(top1_imbalance > 0.0);
         assert!((top1_imbalance - 0.666666).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_checksum_format_for_checksum() {
+        // Test the format_for_checksum helper
+        assert_eq!(Orderbook::format_for_checksum(50000.0), "5");
+        assert_eq!(Orderbook::format_for_checksum(0.001234), "1234");
+        assert_eq!(Orderbook::format_for_checksum(123.456), "123456");
+        assert_eq!(Orderbook::format_for_checksum(0.0), "0");
+    }
+
+    #[test]
+    fn test_checksum_calculate() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        // Add some levels
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 1.0 },
+                PriceLevelRaw { price: 49900.0, qty: 2.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 1.5 },
+                PriceLevelRaw { price: 50200.0, qty: 2.5 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        // Calculate checksum (should be deterministic)
+        let checksum1 = ob.calculate_checksum();
+        let checksum2 = ob.calculate_checksum();
+        assert_eq!(checksum1, checksum2);
+        
+        // Checksum should change when orderbook changes
+        let update2 = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 3.0 }, // Changed qty
+            ],
+            asks: vec![],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        ob.apply_update(&update2);
+        
+        let checksum3 = ob.calculate_checksum();
+        assert_ne!(checksum1, checksum3);
+    }
+
+    #[test]
+    fn test_checksum_validation() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        let update = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 1.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 1.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        
+        ob.apply_update(&update);
+        
+        let correct_checksum = ob.calculate_checksum();
+        
+        // Valid checksum
+        assert!(ob.validate_checksum(correct_checksum));
+        
+        // Invalid checksum
+        assert!(!ob.validate_checksum(correct_checksum + 1));
+        
+        // Detailed validation
+        let validation = ob.checksum_validation(correct_checksum);
+        assert!(validation.is_valid());
+        assert!(!validation.is_corrupted());
+        assert_eq!(validation.expected, correct_checksum);
+        assert_eq!(validation.calculated, correct_checksum);
+        
+        let bad_validation = ob.checksum_validation(12345);
+        assert!(!bad_validation.is_valid());
+        assert!(bad_validation.is_corrupted());
+    }
+
+    #[test]
+    fn test_checksum_in_apply_update() {
+        let mut ob = Orderbook::new("BTC/USD".to_string());
+        
+        // First update without checksum
+        let update1 = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 50000.0, qty: 1.0 },
+            ],
+            asks: vec![
+                PriceLevelRaw { price: 50100.0, qty: 1.0 },
+            ],
+            checksum: 0,
+            timestamp: "".to_string(),
+        };
+        ob.apply_update(&update1);
+        assert!(ob.checksum_valid); // Should be valid (no checksum to compare)
+        
+        // Calculate correct checksum (verify it's non-zero)
+        let _checksum = ob.calculate_checksum();
+        assert!(_checksum != 0 || (ob.bids.is_empty() && ob.asks.is_empty()));
+        
+        // Update with correct checksum
+        let update2 = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 49900.0, qty: 2.0 },
+            ],
+            asks: vec![],
+            checksum: 0, // Will calculate after this update
+            timestamp: "".to_string(),
+        };
+        ob.apply_update(&update2);
+        let correct2 = ob.calculate_checksum();
+        
+        // Now simulate receiving update with matching checksum
+        let mut ob2 = Orderbook::new("BTC/USD".to_string());
+        ob2.apply_update(&update1);
+        let update3 = OrderbookData {
+            symbol: "BTC/USD".to_string(),
+            bids: vec![
+                PriceLevelRaw { price: 49900.0, qty: 2.0 },
+            ],
+            asks: vec![],
+            checksum: correct2,
+            timestamp: "".to_string(),
+        };
+        
+        let valid = ob2.apply_update_validated(&update3);
+        assert!(valid);
+        assert!(ob2.checksum_valid);
+        assert_eq!(ob2.last_checksum, correct2);
     }
 }
 

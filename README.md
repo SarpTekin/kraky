@@ -110,6 +110,7 @@ Backpressure stats (delivered / dropped / drop rate):
 - **Real-time Market Data**: Stream orderbook, trades, tickers, and OHLC candles
 - **Managed Orderbook State**: Automatic reconstruction from incremental updates
 - **Orderbook Imbalance Detection**: Built-in bullish/bearish signal generation
+- **Orderbook Checksum Validation**: CRC32 validation to detect data corruption
 - **Smart Reconnection**: Automatic reconnection with exponential backoff
 - **Type-safe API**: Strongly typed models for all Kraken message types
 - **Async/Await**: Built on Tokio for efficient async I/O
@@ -431,6 +432,40 @@ if let Some(ob) = client.get_orderbook("BTC/USD") {
 | `imbalance_within_depth(pct)` | Imbalance within % of mid price |
 | `imbalance_metrics()` | Detailed metrics (volumes, ratio, signal) |
 
+## Orderbook Checksum Validation
+
+Kraken sends CRC32 checksums with orderbook updates. The SDK validates these automatically:
+
+```rust
+if let Some(ob) = client.get_orderbook("BTC/USD") {
+    // Check if last update had valid checksum
+    if !ob.checksum_valid {
+        println!("Orderbook might be corrupted!");
+        client.reconnect()?; // Get fresh snapshot
+    }
+
+    // Calculate and display checksum
+    let checksum = ob.calculate_checksum();
+    println!("Checksum: 0x{:08X}", checksum);
+}
+
+// Validate all orderbooks and auto-reconnect if corrupted
+let corrupted_count = client.validate_orderbooks_and_reconnect()?;
+
+// Quick check for specific pair
+if client.is_orderbook_valid("BTC/USD") == Some(false) {
+    client.reconnect()?;
+}
+```
+
+### Checksum Methods
+
+| Method | Description |
+|--------|-------------|
+| `calculate_checksum()` | Calculate CRC32 of top 10 levels |
+| `validate_checksum(expected)` | Returns `true` if checksum matches |
+| `checksum_validation(expected)` | Returns detailed `ChecksumValidation` struct |
+
 ## Smart Reconnection
 
 The SDK automatically reconnects when the connection drops, with configurable exponential backoff:
@@ -548,8 +583,8 @@ The SDK is designed for low-latency market data processing:
 cargo test
 ```
 
-**29 tests** covering:
-- Orderbook operations (13 tests) - including imbalance detection
+**33 tests** covering:
+- Orderbook operations (17 tests) - including imbalance & checksum validation
 - Subscription handling (4 tests)
 - Error parsing (6 tests)
 - Reconnection logic (6 tests)

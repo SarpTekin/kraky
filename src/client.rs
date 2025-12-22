@@ -443,6 +443,49 @@ impl KrakyClient {
         self.orderbooks.read().get(pair).cloned()
     }
 
+    /// Check if the orderbook for a pair has a valid checksum
+    /// 
+    /// Returns `None` if no orderbook exists for the pair.
+    /// Returns `Some(true)` if the last checksum validation passed.
+    /// Returns `Some(false)` if the orderbook might be corrupted.
+    /// 
+    /// # Example
+    /// 
+    /// ```ignore
+    /// if client.is_orderbook_valid("BTC/USD") == Some(false) {
+    ///     // Orderbook is corrupted, trigger reconnect
+    ///     client.reconnect()?;
+    /// }
+    /// ```
+    pub fn is_orderbook_valid(&self, pair: &str) -> Option<bool> {
+        self.orderbooks.read().get(pair).map(|ob| ob.checksum_valid)
+    }
+
+    /// Validate all orderbooks and reconnect if any are corrupted
+    /// 
+    /// Returns the number of corrupted orderbooks found.
+    /// If any are corrupted, a reconnection is triggered automatically.
+    pub fn validate_orderbooks_and_reconnect(&self) -> Result<usize> {
+        let corrupted: Vec<String> = self.orderbooks
+            .read()
+            .iter()
+            .filter(|(_, ob)| !ob.checksum_valid)
+            .map(|(pair, _)| pair.clone())
+            .collect();
+
+        let count = corrupted.len();
+        
+        if count > 0 {
+            warn!(
+                "Found {} corrupted orderbook(s): {:?}. Triggering reconnect.",
+                count, corrupted
+            );
+            self.reconnect()?;
+        }
+
+        Ok(count)
+    }
+
     /// Disconnect from the WebSocket (lock-free)
     /// 
     /// This will stop reconnection attempts and close the connection.
