@@ -21,7 +21,7 @@ A lightweight, high-performance Rust SDK for connecting to the [Kraken Exchange]
 git clone https://github.com/SarpTekin/kraky.git
 cd kraky
 
-# Run all tests (29 tests)
+# Run all tests (33 tests)
 cargo test
 
 # ⭐ RECOMMENDED: Run the comprehensive demo (shows all features)
@@ -37,66 +37,96 @@ cargo run --example multi_subscribe # Multiple subscriptions
 
 ### What You'll See
 
-**Demo Example Output:**
+**Demo Example Output (abbreviated):**
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║           🐙 KRAKY SDK DEMO - Kraken Forge Hackathon          ║
+║           🐙 KRAKY SDK DEMO - Kraken Forge Hackathon         ║
 ╚══════════════════════════════════════════════════════════════╝
 
+═══════════════════════════════════════════════════════════════
+  FEATURE 1: WebSocket Connection
+═══════════════════════════════════════════════════════════════
 📡 Connecting to Kraken WebSocket API...
 ✅ Connected!
 
-📖 ORDERBOOK UPDATE #1
-   Best Bid: $97234.50
-   Best Ask: $97235.00
-   Spread:   $0.50
-   Mid:      $97234.75
-   Top 3 Bids: ["$97234", "$97233", "$97232"]
-   Top 3 Asks: ["$97235", "$97236", "$97237"]
+═══════════════════════════════════════════════════════════════
+  FEATURE 2: Connection Events
+═══════════════════════════════════════════════════════════════
+📌 Subscribed to connection events
+   Events: Connected, Disconnected, Reconnecting, Reconnected...
 
+═══════════════════════════════════════════════════════════════
+  FEATURE 3: Connection State
+═══════════════════════════════════════════════════════════════
+   Current state: ✅ Connected
+   is_connected(): true
+   Reconnect Config: enabled, 500ms initial, 30s max, 2.0x backoff
+
+═══════════════════════════════════════════════════════════════
+  FEATURE 5: Live Market Data (15 seconds)
+═══════════════════════════════════════════════════════════════
+📖 ORDERBOOK UPDATE #1
+   Best Bid: $97234.50 | Best Ask: $97235.00
+   Spread: $0.50 | Mid: $97234.75
 🟢 TRADE: Buy 0.050000 BTC @ $97235.00
-🔴 TRADE: Sell 0.120000 BTC @ $97234.50
 📈 TICKER: $97235.00 (24h: +2.35%) Vol: 1234.56 BTC
 
 ═══════════════════════════════════════════════════════════════
-                    DEMO STATISTICS
+  FEATURE 6: Backpressure Monitoring
 ═══════════════════════════════════════════════════════════════
-Messages received in 15 seconds:
-   📖 Orderbook updates: 47
-   💱 Trades:            23
-   📈 Ticker updates:    12
-
 Backpressure stats (delivered / dropped / drop rate):
    📖 Orderbook: 47 / 0 / 0.00%
    💱 Trades:    23 / 0 / 0.00%
-   📈 Ticker:    12 / 0 / 0.00%
 
 ═══════════════════════════════════════════════════════════════
-                    ORDERBOOK IMBALANCE
+  FEATURE 7: Orderbook Checksum Validation (CRC32)
 ═══════════════════════════════════════════════════════════════
+   Calculated Checksum: 0x1A2B3C4D
+   Checksum Valid:      ✅ Yes
 
-   Full Orderbook Analysis:
+═══════════════════════════════════════════════════════════════
+  FEATURE 8: Orderbook Imbalance Detection
+═══════════════════════════════════════════════════════════════
    ┌─────────────────────────────────────┐
    │  Bid Volume:   12.3456 BTC          │
    │  Ask Volume:   8.7654 BTC           │
-   │  Bid/Ask Ratio: 1.41                │
    │  Imbalance:     +17.02%             │
    │  Signal:       🟢 BULLISH           │
    └─────────────────────────────────────┘
 
-   Top 5 Levels Imbalance: +23.45% 🟢
-   Within 0.5% of Mid:     +12.34% 🟢
-
 ╔══════════════════════════════════════════════════════════════╗
 ║                    🎉 DEMO COMPLETE!                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Features Demonstrated:                                       ║
+║    ✅ WebSocket Connection                                    ║
+║    ✅ Connection Events (lifecycle callbacks)                 ║
+║    ✅ Connection State Monitoring                             ║
+║    ✅ Multiple Subscriptions                                  ║
+║    ✅ Backpressure Monitoring                                 ║
+║    ✅ Orderbook Checksum Validation                           ║
+║    ✅ Orderbook Imbalance Detection                           ║
+║    ✅ Managed Orderbook State                                 ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-### Key Features Demonstrated
+### Key Features Demonstrated in Demo
+
+| Feature # | What It Shows |
+|-----------|---------------|
+| 1 | WebSocket Connection |
+| 2 | Connection Events (lifecycle callbacks) |
+| 3 | Connection State Monitoring |
+| 4 | Multiple Subscriptions (orderbook, trades, ticker) |
+| 5 | Real-time Market Data Processing |
+| 6 | Backpressure Monitoring |
+| 7 | Orderbook Checksum Validation (CRC32) |
+| 8 | Orderbook Imbalance Detection |
+| 9 | Managed Orderbook State |
+
+### Other Examples
 
 | Example | What It Shows |
 |---------|---------------|
-| ⭐ `demo` | **All features in one place** - orderbook, trades, ticker, backpressure stats |
 | `orderbook` | Real-time depth, managed state, spread calculation |
 | `trades` | Live trade stream, buy/sell sides |
 | `ticker` | Price, volume, 24h change |

@@ -1,18 +1,21 @@
 //! Kraky SDK Demo for Hackathon Judges
 //!
-//! This example demonstrates all key features of the SDK in one place.
+//! This example demonstrates ALL key features of the SDK in one place.
 //! Run with: cargo run --example demo
 //!
 //! Features demonstrated:
-//! - WebSocket connection to Kraken
-//! - Orderbook subscription with managed state
-//! - **Orderbook imbalance detection** (bullish/bearish signals)
-//! - Trade subscription
-//! - Ticker subscription
-//! - Backpressure monitoring
-//! - Error handling
+//! ✅ WebSocket connection to Kraken
+//! ✅ Connection events (connect/disconnect/reconnect callbacks)
+//! ✅ Connection state monitoring
+//! ✅ Orderbook subscription with managed state
+//! ✅ Orderbook imbalance detection (bullish/bearish signals)
+//! ✅ Orderbook checksum validation
+//! ✅ Trade subscription
+//! ✅ Ticker subscription
+//! ✅ Backpressure monitoring
+//! ✅ Smart reconnection configuration
 
-use kraky::KrakyClient;
+use kraky::{KrakyClient, ConnectionEvent, ConnectionState, ImbalanceSignal};
 use std::time::Duration;
 
 #[tokio::main]
@@ -28,29 +31,103 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 1: Connect to Kraken WebSocket
+    // FEATURE 1: Connect to Kraken WebSocket
     // ═══════════════════════════════════════════════════════════════════════
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 1: WebSocket Connection");
+    println!("═══════════════════════════════════════════════════════════════\n");
+
     println!("📡 Connecting to Kraken WebSocket API...");
     let client = KrakyClient::connect().await?;
     println!("✅ Connected!\n");
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 2: Subscribe to multiple data streams
+    // FEATURE 2: Connection Events (lifecycle callbacks)
     // ═══════════════════════════════════════════════════════════════════════
-    println!("📊 Subscribing to BTC/USD data streams...\n");
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 2: Connection Events");
+    println!("═══════════════════════════════════════════════════════════════\n");
 
+    let mut events = client.subscribe_events();
+    println!("📌 Subscribed to connection events");
+    println!("   Events: Connected, Disconnected, Reconnecting, Reconnected,");
+    println!("           ReconnectFailed, ReconnectExhausted\n");
+
+    // Spawn event handler in background
+    tokio::spawn(async move {
+        while let Some(event) = events.recv().await {
+            match event {
+                ConnectionEvent::Connected => println!("🔔 EVENT: Connected"),
+                ConnectionEvent::Disconnected(reason) => {
+                    println!("🔔 EVENT: Disconnected - {:?}", reason)
+                }
+                ConnectionEvent::Reconnecting(n) => {
+                    println!("🔔 EVENT: Reconnecting (attempt #{})", n)
+                }
+                ConnectionEvent::Reconnected => println!("🔔 EVENT: Reconnected"),
+                ConnectionEvent::ReconnectFailed(n, e) => {
+                    println!("🔔 EVENT: Reconnect failed #{}: {}", n, e)
+                }
+                ConnectionEvent::ReconnectExhausted => {
+                    println!("🔔 EVENT: Reconnect exhausted")
+                }
+            }
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FEATURE 3: Connection State Monitoring
+    // ═══════════════════════════════════════════════════════════════════════
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 3: Connection State");
+    println!("═══════════════════════════════════════════════════════════════\n");
+
+    let state = client.connection_state();
+    let state_str = match state {
+        ConnectionState::Connected => "✅ Connected",
+        ConnectionState::Connecting => "🔄 Connecting",
+        ConnectionState::Reconnecting => "🔄 Reconnecting",
+        ConnectionState::Disconnected => "❌ Disconnected",
+    };
+    println!("   Current state: {}", state_str);
+    println!("   is_connected(): {}", client.is_connected());
+    println!("   is_reconnecting(): {}", client.is_reconnecting());
+    println!("   URL: {}\n", client.url());
+
+    // Show reconnect config
+    let config = client.reconnect_config();
+    println!("   Reconnect Config:");
+    println!("     - Enabled: {}", config.enabled);
+    println!("     - Initial delay: {:?}", config.initial_delay);
+    println!("     - Max delay: {:?}", config.max_delay);
+    println!("     - Backoff multiplier: {}x", config.backoff_multiplier);
+    println!("     - Max attempts: {:?}\n", config.max_attempts);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FEATURE 4: Subscribe to Multiple Data Streams
+    // ═══════════════════════════════════════════════════════════════════════
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 4: Data Subscriptions");
+    println!("═══════════════════════════════════════════════════════════════\n");
+
+    println!("📊 Subscribing to BTC/USD data streams...");
     let mut orderbook_sub = client.subscribe_orderbook("BTC/USD", 10).await?;
+    println!("   ✅ Orderbook (depth: 10)");
+    
     let mut trades_sub = client.subscribe_trades("BTC/USD").await?;
+    println!("   ✅ Trades");
+    
     let mut ticker_sub = client.subscribe_ticker("BTC/USD").await?;
+    println!("   ✅ Ticker\n");
 
     // Give subscriptions time to initialize
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 3: Display real-time data
+    // FEATURE 5: Real-time Market Data
     // ═══════════════════════════════════════════════════════════════════════
     println!("═══════════════════════════════════════════════════════════════");
-    println!("                    LIVE MARKET DATA");
+    println!("  FEATURE 5: Live Market Data (15 seconds)");
     println!("═══════════════════════════════════════════════════════════════\n");
 
     let mut orderbook_count = 0;
@@ -70,26 +147,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if orderbook_count <= 3 {
                     println!("📖 ORDERBOOK UPDATE #{}", orderbook_count);
                     
-                    // Show managed state
                     if let Some(ob) = client.get_orderbook("BTC/USD") {
                         if let (Some(bid), Some(ask)) = (ob.best_bid(), ob.best_ask()) {
-                            println!("   Best Bid: ${:.2}", bid);
-                            println!("   Best Ask: ${:.2}", ask);
+                            println!("   Best Bid: ${:.2} | Best Ask: ${:.2}", bid, ask);
                             if let Some(spread) = ob.spread() {
-                                println!("   Spread:   ${:.2}", spread);
-                            }
-                            if let Some(mid) = ob.mid_price() {
-                                println!("   Mid:      ${:.2}", mid);
+                                println!("   Spread: ${:.2} | Mid: ${:.2}", spread, ob.mid_price().unwrap_or(0.0));
                             }
                         }
                         
-                        // Show top levels
                         let bids = ob.top_bids(3);
                         let asks = ob.top_asks(3);
                         println!("   Top 3 Bids: {:?}", bids.iter().map(|l| format!("${:.0}", l.price)).collect::<Vec<_>>());
                         println!("   Top 3 Asks: {:?}", asks.iter().map(|l| format!("${:.0}", l.price)).collect::<Vec<_>>());
                     }
-                    
                     println!();
                 }
             }
@@ -111,26 +181,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             
-            _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                // Periodic timeout to check demo duration
-            }
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {}
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 4: Show statistics
+    // FEATURE 6: Backpressure Monitoring
     // ═══════════════════════════════════════════════════════════════════════
     println!("\n═══════════════════════════════════════════════════════════════");
-    println!("                    DEMO STATISTICS");
+    println!("  FEATURE 6: Backpressure Monitoring");
     println!("═══════════════════════════════════════════════════════════════\n");
 
     println!("Messages received in {} seconds:", demo_duration.as_secs());
-    println!("   📖 Orderbook updates: {}", orderbook_count);
-    println!("   💱 Trades:            {}", trade_count);
-    println!("   📈 Ticker updates:    {}", ticker_count);
+    println!("   📖 Orderbook: {}", orderbook_count);
+    println!("   💱 Trades:    {}", trade_count);
+    println!("   📈 Ticker:    {}", ticker_count);
     println!();
 
-    // Show backpressure stats
     let ob_stats = orderbook_sub.stats();
     let trade_stats = trades_sub.stats();
     let ticker_stats = ticker_sub.stats();
@@ -144,19 +211,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ticker_stats.delivered(), ticker_stats.dropped(), ticker_stats.drop_rate());
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STEP 5: Final orderbook state
+    // FEATURE 7: Orderbook Checksum Validation
     // ═══════════════════════════════════════════════════════════════════════
     println!("\n═══════════════════════════════════════════════════════════════");
-    println!("                    FINAL ORDERBOOK STATE");
+    println!("  FEATURE 7: Orderbook Checksum Validation (CRC32)");
     println!("═══════════════════════════════════════════════════════════════\n");
 
     if let Some(ob) = client.get_orderbook("BTC/USD") {
-        println!("BTC/USD Orderbook (after {} updates):", orderbook_count);
+        let checksum = ob.calculate_checksum();
+        println!("   Calculated Checksum: 0x{:08X}", checksum);
+        println!("   Last Checksum:       0x{:08X}", ob.last_checksum);
+        println!("   Checksum Valid:      {}", if ob.checksum_valid { "✅ Yes" } else { "❌ No" });
+        
+        // Show validation helper
+        let is_valid = client.is_orderbook_valid("BTC/USD");
+        println!("   is_orderbook_valid(): {:?}", is_valid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FEATURE 8: Orderbook Imbalance Detection
+    // ═══════════════════════════════════════════════════════════════════════
+    println!("\n═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 8: Orderbook Imbalance Detection");
+    println!("═══════════════════════════════════════════════════════════════\n");
+
+    if let Some(ob) = client.get_orderbook("BTC/USD") {
+        let metrics = ob.imbalance_metrics();
+        let signal = metrics.signal(0.1);
+        let signal_str = match signal {
+            ImbalanceSignal::Bullish => "🟢 BULLISH (more buy pressure)",
+            ImbalanceSignal::Bearish => "🔴 BEARISH (more sell pressure)",
+            ImbalanceSignal::Neutral => "⚪ NEUTRAL (balanced)",
+        };
+
+        println!("   Full Orderbook Analysis:");
+        println!("   ┌─────────────────────────────────────┐");
+        println!("   │  Bid Volume:   {:<18.4} BTC │", metrics.bid_volume);
+        println!("   │  Ask Volume:   {:<18.4} BTC │", metrics.ask_volume);
+        println!("   │  Bid/Ask Ratio: {:<17.4}   │", metrics.bid_ask_ratio);
+        println!("   │  Imbalance:     {:>+17.2}%   │", metrics.imbalance_ratio * 100.0);
+        println!("   │  Signal:       {:<18}  │", signal_str.split(" (").next().unwrap());
+        println!("   └─────────────────────────────────────┘");
+        println!();
+        println!("   Signal Interpretation: {}", signal_str);
+
+        // Different imbalance calculations
+        let full = ob.imbalance();
+        let top5 = ob.imbalance_top_n(5);
+        let tight = ob.imbalance_within_depth(0.005);
+
+        println!();
+        println!("   Imbalance Methods:");
+        println!("     - Full orderbook:  {:>+.2}%", full * 100.0);
+        println!("     - Top 5 levels:    {:>+.2}%", top5 * 100.0);
+        if let Some(t) = tight {
+            println!("     - Within 0.5%:     {:>+.2}%", t * 100.0);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FEATURE 9: Managed Orderbook State
+    // ═══════════════════════════════════════════════════════════════════════
+    println!("\n═══════════════════════════════════════════════════════════════");
+    println!("  FEATURE 9: Managed Orderbook State");
+    println!("═══════════════════════════════════════════════════════════════\n");
+
+    if let Some(ob) = client.get_orderbook("BTC/USD") {
+        println!("   Symbol: {}", ob.symbol);
+        println!("   Sequence: {}", ob.sequence);
         println!("   Bid levels: {}", ob.bids.len());
         println!("   Ask levels: {}", ob.asks.len());
         
         if let (Some(bid), Some(ask)) = (ob.best_bid(), ob.best_ask()) {
-            println!("\n   ┌─────────────────────────────────────┐");
+            println!();
+            println!("   ┌─────────────────────────────────────┐");
             println!("   │  Best Bid: ${:<22.2} │", bid);
             println!("   │  Best Ask: ${:<22.2} │", ask);
             if let Some(spread) = ob.spread() {
@@ -167,43 +295,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("   └─────────────────────────────────────┘");
         }
-
-        // Show orderbook imbalance analysis
-        println!("\n═══════════════════════════════════════════════════════════════");
-        println!("                    ORDERBOOK IMBALANCE");
-        println!("═══════════════════════════════════════════════════════════════\n");
-
-        let metrics = ob.imbalance_metrics();
-        let signal = metrics.signal(0.1);
-        let signal_emoji = match signal {
-            kraky::ImbalanceSignal::Bullish => "🟢 BULLISH",
-            kraky::ImbalanceSignal::Bearish => "🔴 BEARISH",
-            kraky::ImbalanceSignal::Neutral => "⚪ NEUTRAL",
-        };
-
-        println!("   Full Orderbook Analysis:");
-        println!("   ┌─────────────────────────────────────┐");
-        println!("   │  Bid Volume:   {:<18.4} BTC │", metrics.bid_volume);
-        println!("   │  Ask Volume:   {:<18.4} BTC │", metrics.ask_volume);
-        println!("   │  Bid/Ask Ratio: {:<17.4}   │", metrics.bid_ask_ratio);
-        println!("   │  Imbalance:     {:>+17.2}%   │", metrics.imbalance_ratio * 100.0);
-        println!("   │  Signal:       {:<18}  │", signal_emoji);
-        println!("   └─────────────────────────────────────┘");
-
-        // Top-of-book imbalance (most actionable)
-        let top5_imbalance = ob.imbalance_top_n(5);
-        let top5_signal = if top5_imbalance > 0.1 { "🟢" } else if top5_imbalance < -0.1 { "🔴" } else { "⚪" };
-        println!("\n   Top 5 Levels Imbalance: {:>+.2}% {}", top5_imbalance * 100.0, top5_signal);
-        
-        // Imbalance within 0.5% of mid price (tight spread)
-        if let Some(tight_imbalance) = ob.imbalance_within_depth(0.005) {
-            let tight_signal = if tight_imbalance > 0.1 { "🟢" } else if tight_imbalance < -0.1 { "🔴" } else { "⚪" };
-            println!("   Within 0.5% of Mid:     {:>+.2}% {}", tight_imbalance * 100.0, tight_signal);
-        }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // SUMMARY
+    // ═══════════════════════════════════════════════════════════════════════
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    🎉 DEMO COMPLETE!                          ║");
+    println!("╠══════════════════════════════════════════════════════════════╣");
+    println!("║  Features Demonstrated:                                       ║");
+    println!("║    ✅ WebSocket Connection                                    ║");
+    println!("║    ✅ Connection Events (lifecycle callbacks)                 ║");
+    println!("║    ✅ Connection State Monitoring                             ║");
+    println!("║    ✅ Multiple Subscriptions (orderbook, trades, ticker)      ║");
+    println!("║    ✅ Real-time Market Data Processing                        ║");
+    println!("║    ✅ Backpressure Monitoring                                 ║");
+    println!("║    ✅ Orderbook Checksum Validation (CRC32)                   ║");
+    println!("║    ✅ Orderbook Imbalance Detection                           ║");
+    println!("║    ✅ Managed Orderbook State                                 ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // Disconnect cleanly
@@ -211,4 +320,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
