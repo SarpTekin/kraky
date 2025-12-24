@@ -1,19 +1,34 @@
 //! Kraky SDK Demo for Hackathon Judges
 //!
-//! This example demonstrates ALL key features of the SDK in one place.
-//! Run with: cargo run --example demo
+//! This example demonstrates the core market data and analytics features of the SDK.
 //!
-//! Features demonstrated:
+//! ## Run
+//! ```bash
+//! # With all market data features
+//! cargo run --example demo --features full
+//!
+//! # Or just the basics (no checksum validation)
+//! cargo run --example demo --features trades,ticker,analytics
+//! ```
+//!
+//! ## Features Demonstrated
 //! ✅ WebSocket connection to Kraken
 //! ✅ Connection events (connect/disconnect/reconnect callbacks)
 //! ✅ Connection state monitoring
 //! ✅ Orderbook subscription with managed state
 //! ✅ Orderbook imbalance detection (bullish/bearish signals)
-//! ✅ Orderbook checksum validation
-//! ✅ Trade subscription
-//! ✅ Ticker subscription
+//! ✅ Orderbook checksum validation (CRC32) - requires 'checksum' feature
+//! ✅ Trade subscription - requires 'trades' feature
+//! ✅ Ticker subscription - requires 'ticker' feature
 //! ✅ Backpressure monitoring
 //! ✅ Smart reconnection configuration
+//!
+//! ## Additional Features (Not in this demo)
+//! For examples of other features, see:
+//! - **Telegram alerts**: `telegram_imbalance_bot.rs`, `simple_price_alerts.rs`
+//! - **WebSocket trading**: `telegram_trading_bot.rs`, `telegram_trading_demo.rs`
+//! - **Private channels**: `auth_example.rs`, `telegram_private_alerts.rs`
+//! - **CSV export**: `export_to_csv.rs`, `export_multi_csv.rs`
 
 use kraky::{KrakyClient, ConnectionEvent, ConnectionState, ImbalanceSignal};
 use std::time::Duration;
