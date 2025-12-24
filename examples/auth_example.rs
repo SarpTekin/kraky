@@ -15,10 +15,18 @@
 //! 3. Set permissions (view balances, view orders, etc.)
 //! 4. Save the API Key and API Secret
 //!
+//! ## Environment Variables
+//! ```bash
+//! export KRAKEN_API_KEY="your_api_key"
+//! export KRAKEN_API_SECRET="your_base64_secret"
+//! ```
+//!
 //! ## Run
 //! ```bash
 //! cargo run --example auth_example --features private
 //! ```
+//!
+//! Without credentials, runs in demo mode to show the authentication flow.
 //!
 //! ## Note
 //! This example shows the authentication infrastructure.
@@ -39,9 +47,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  STEP 1: Creating Credentials");
     println!("═══════════════════════════════════════════════════════════════\n");
 
-    // Note: Replace these with your actual Kraken API credentials
-    let api_key = "YOUR_API_KEY_HERE";
-    let api_secret = "YOUR_API_SECRET_BASE64_HERE"; // Base64 encoded secret from Kraken
+    // Load credentials from environment variables or use demo values
+    let api_key = std::env::var("KRAKEN_API_KEY")
+        .unwrap_or_else(|_| "DEMO_API_KEY_NOT_REAL".to_string());
+    let api_secret = std::env::var("KRAKEN_API_SECRET")
+        .unwrap_or_else(|_| "DEMO_API_SECRET_NOT_REAL_BASE64".to_string());
+
+    let is_demo = api_key.starts_with("DEMO_");
+
+    if is_demo {
+        println!("⚠️  Running in DEMO mode (no real credentials)");
+        println!("   To use real credentials, set environment variables:");
+        println!("   export KRAKEN_API_KEY=\"your_api_key\"");
+        println!("   export KRAKEN_API_SECRET=\"your_base64_secret\"\n");
+    }
 
     let credentials = Credentials::new(api_key, api_secret);
     println!("✅ Credentials created");
