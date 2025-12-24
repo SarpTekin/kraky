@@ -29,8 +29,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ═══════════════════════════════════════════════════════════════════════
 
     // What price levels should trigger alerts?
-    let price_high = 100_000.0;  // Alert if BTC goes above $100k
-    let price_low = 90_000.0;    // Alert if BTC goes below $90k
+    let price_high = 100_000.0; // Alert if BTC goes above $100k
+    let price_low = 90_000.0; // Alert if BTC goes below $90k
 
     println!("⚙️  Alert Configuration:");
     println!("   High Alert: ${:.2}", price_high);
@@ -65,11 +65,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "telegram")]
     bot.send_connection_status(
         true,
-        &format!("🔔 Price Alert Bot started!\n\
+        &format!(
+            "🔔 Price Alert Bot started!\n\
                  High: ${:.2}\n\
                  Low: ${:.2}",
-                 price_high, price_low)
-    ).await?;
+            price_high, price_low
+        ),
+    )
+    .await?;
 
     // ═══════════════════════════════════════════════════════════════════════
     // STEP 4: Subscribe to Price Updates
@@ -98,8 +101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Display status every 20 updates
         if update_count % 20 == 0 {
-            println!("\n📈 Current Price: ${:.2} (24h: {:+.2}%)",
-                current_price, tick.change_pct);
+            println!(
+                "\n📈 Current Price: ${:.2} (24h: {:+.2}%)",
+                current_price, tick.change_pct
+            );
         }
 
         // Check HIGH threshold
@@ -114,8 +119,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "BTC/USD",
                     current_price,
                     price_high,
-                    true  // above threshold
-                ).await?;
+                    true, // above threshold
+                )
+                .await?;
 
                 println!("   ✅ Telegram alert sent!");
             }
@@ -136,8 +142,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "BTC/USD",
                     current_price,
                     price_low,
-                    false  // below threshold
-                ).await?;
+                    false, // below threshold
+                )
+                .await?;
 
                 println!("   ✅ Telegram alert sent!");
             }

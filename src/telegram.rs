@@ -36,8 +36,8 @@
 //! }
 //! ```
 
-use teloxide::prelude::*;
 use crate::error::{KrakyError, Result};
+use teloxide::prelude::*;
 
 #[cfg(feature = "analytics")]
 use crate::models::{ImbalanceMetrics, ImbalanceSignal};
@@ -111,12 +111,7 @@ impl TelegramNotifier {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn send_price_alert(
-        &self,
-        symbol: &str,
-        price: f64,
-        context: &str,
-    ) -> Result<()> {
+    pub async fn send_price_alert(&self, symbol: &str, price: f64, context: &str) -> Result<()> {
         let message = format!(
             "💰 {} Price Alert\n\
             Price: ${:.2}\n\
@@ -164,17 +159,17 @@ impl TelegramNotifier {
             ImbalanceSignal::Bullish => (
                 "🟢",
                 "BULLISH",
-                "Strong buy pressure detected - more bids than asks"
+                "Strong buy pressure detected - more bids than asks",
             ),
             ImbalanceSignal::Bearish => (
                 "🔴",
                 "BEARISH",
-                "Strong sell pressure detected - more asks than bids"
+                "Strong sell pressure detected - more asks than bids",
             ),
             ImbalanceSignal::Neutral => (
                 "⚪",
                 "NEUTRAL",
-                "Balanced orderbook - no clear directional bias"
+                "Balanced orderbook - no clear directional bias",
             ),
         };
 
@@ -486,7 +481,8 @@ impl TelegramNotifier {
         };
 
         // Determine if this is a divergence
-        let is_divergence = (price_change > 0.0 && matches!(orderbook_signal, ImbalanceSignal::Bearish))
+        let is_divergence = (price_change > 0.0
+            && matches!(orderbook_signal, ImbalanceSignal::Bearish))
             || (price_change < 0.0 && matches!(orderbook_signal, ImbalanceSignal::Bullish));
 
         if !is_divergence {
@@ -611,10 +607,7 @@ impl TelegramNotifier {
     /// # }
     /// ```
     #[cfg(feature = "private")]
-    pub async fn send_balance_update(
-        &self,
-        update: &crate::models::BalanceUpdate,
-    ) -> Result<()> {
+    pub async fn send_balance_update(&self, update: &crate::models::BalanceUpdate) -> Result<()> {
         if let Some(data) = update.data.first() {
             let mut balance_lines = Vec::new();
 
@@ -662,10 +655,7 @@ impl TelegramNotifier {
     /// # }
     /// ```
     #[cfg(feature = "private")]
-    pub async fn send_order_update(
-        &self,
-        update: &crate::models::OrderUpdate,
-    ) -> Result<()> {
+    pub async fn send_order_update(&self, update: &crate::models::OrderUpdate) -> Result<()> {
         if let Some(order) = update.data.first() {
             let emoji = match order.status.as_str() {
                 "open" => "🟢",
@@ -683,7 +673,11 @@ impl TelegramNotifier {
                 _ => order.status.to_uppercase(),
             };
 
-            let side_emoji = if order.side.to_lowercase() == "buy" { "🟢" } else { "🔴" };
+            let side_emoji = if order.side.to_lowercase() == "buy" {
+                "🟢"
+            } else {
+                "🔴"
+            };
 
             let mut details = vec![
                 format!("{} {} Order", side_emoji, order.side.to_uppercase()),
@@ -697,7 +691,8 @@ impl TelegramNotifier {
 
             details.push(format!("Quantity: {}", order.order_qty));
 
-            if !order.filled_qty.is_empty() && order.filled_qty != "0" && order.filled_qty != "0.0" {
+            if !order.filled_qty.is_empty() && order.filled_qty != "0" && order.filled_qty != "0.0"
+            {
                 details.push(format!("Filled: {}", order.filled_qty));
             }
 
@@ -717,7 +712,9 @@ impl TelegramNotifier {
                 details.join("\n"),
                 "─".repeat(30),
                 if order.timestamp.is_empty() {
-                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string()
+                    chrono::Utc::now()
+                        .format("%Y-%m-%d %H:%M:%S UTC")
+                        .to_string()
                 } else {
                     order.timestamp.clone()
                 }
@@ -803,7 +800,9 @@ impl TelegramNotifier {
                 liquidity_emoji,
                 exec.liquidity.to_uppercase(),
                 if exec.timestamp.is_empty() {
-                    chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string()
+                    chrono::Utc::now()
+                        .format("%Y-%m-%d %H:%M:%S UTC")
+                        .to_string()
                 } else {
                     exec.timestamp.clone()
                 }
@@ -930,13 +929,20 @@ impl TelegramNotifier {
             side_emoji,
             params.side,
             order_type,
-            params.order_qty.map(|q| format!("{:.6}", q)).unwrap_or("N/A".to_string()),
+            params
+                .order_qty
+                .map(|q| format!("{:.6}", q))
+                .unwrap_or("N/A".to_string()),
             match params.limit_price {
                 Some(price) => format!("Limit Price: ${:.2}", price),
                 None => "Market Price".to_string(),
             },
             response.order_status,
-            if params.validate.unwrap_or(false) { "✓" } else { "💸" }
+            if params.validate.unwrap_or(false) {
+                "✓"
+            } else {
+                "💸"
+            }
         );
 
         self.send_alert(&message).await

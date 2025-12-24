@@ -182,3 +182,8 @@ required-features = ["telegram", "trading"]
 name = "export_to_csv"
 path = "examples/export_to_csv.rs"
 required-features = ["trades", "analytics"]
+
+[[example]]
+name = "export_multi_csv"
+path = "examples/export_multi_csv.rs"
+required-features = ["analytics"]

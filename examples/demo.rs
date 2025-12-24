@@ -30,7 +30,7 @@
 //! - **Private channels**: `auth_example.rs`, `telegram_private_alerts.rs`
 //! - **CSV export**: `export_to_csv.rs`, `export_multi_csv.rs`
 
-use kraky::{KrakyClient, ConnectionEvent, ConnectionState, ImbalanceSignal};
+use kraky::{ConnectionEvent, ConnectionState, ImbalanceSignal, KrakyClient};
 use std::time::Duration;
 
 #[tokio::main]
@@ -128,10 +128,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Subscribing to BTC/USD data streams...");
     let mut orderbook_sub = client.subscribe_orderbook("BTC/USD", 10).await?;
     println!("   ✅ Orderbook (depth: 10)");
-    
+
     let mut trades_sub = client.subscribe_trades("BTC/USD").await?;
     println!("   ✅ Trades");
-    
+
     let mut ticker_sub = client.subscribe_ticker("BTC/USD").await?;
     println!("   ✅ Ticker\n");
 
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 orderbook_count += 1;
                 if orderbook_count <= 3 {
                     println!("📖 ORDERBOOK UPDATE #{}", orderbook_count);
-                    
+
                     if let Some(ob) = client.get_orderbook("BTC/USD") {
                         if let (Some(bid), Some(ask)) = (ob.best_bid(), ob.best_ask()) {
                             println!("   Best Bid: ${:.2} | Best Ask: ${:.2}", bid, ask);
@@ -169,7 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("   Spread: ${:.2} | Mid: ${:.2}", spread, ob.mid_price().unwrap_or(0.0));
                             }
                         }
-                        
+
                         let bids = ob.top_bids(3);
                         let asks = ob.top_asks(3);
                         println!("   Top 3 Bids: {:?}", bids.iter().map(|l| format!("${:.0}", l.price)).collect::<Vec<_>>());
@@ -178,24 +178,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!();
                 }
             }
-            
+
             Some(trade) = trades_sub.next() => {
                 trade_count += 1;
                 if trade_count <= 10 {
                     let side_emoji = if format!("{:?}", trade.side).contains("Buy") { "🟢" } else { "🔴" };
-                    println!("{} TRADE: {:?} {:.6} BTC @ ${:.2}", 
+                    println!("{} TRADE: {:?} {:.6} BTC @ ${:.2}",
                         side_emoji, trade.side, trade.qty, trade.price);
                 }
             }
-            
+
             Some(tick) = ticker_sub.next() => {
                 ticker_count += 1;
                 if ticker_count <= 5 {
-                    println!("📈 TICKER: ${:.2} (24h: {:+.2}%) Vol: {:.2} BTC", 
+                    println!("📈 TICKER: ${:.2} (24h: {:+.2}%) Vol: {:.2} BTC",
                         tick.last, tick.change_pct, tick.volume);
                 }
             }
-            
+
             _ = tokio::time::sleep(Duration::from_millis(100)) => {}
         }
     }
@@ -218,12 +218,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ticker_stats = ticker_sub.stats();
 
     println!("Backpressure stats (delivered / dropped / drop rate):");
-    println!("   📖 Orderbook: {} / {} / {:.2}%", 
-        ob_stats.delivered(), ob_stats.dropped(), ob_stats.drop_rate());
-    println!("   💱 Trades:    {} / {} / {:.2}%", 
-        trade_stats.delivered(), trade_stats.dropped(), trade_stats.drop_rate());
-    println!("   📈 Ticker:    {} / {} / {:.2}%", 
-        ticker_stats.delivered(), ticker_stats.dropped(), ticker_stats.drop_rate());
+    println!(
+        "   📖 Orderbook: {} / {} / {:.2}%",
+        ob_stats.delivered(),
+        ob_stats.dropped(),
+        ob_stats.drop_rate()
+    );
+    println!(
+        "   💱 Trades:    {} / {} / {:.2}%",
+        trade_stats.delivered(),
+        trade_stats.dropped(),
+        trade_stats.drop_rate()
+    );
+    println!(
+        "   📈 Ticker:    {} / {} / {:.2}%",
+        ticker_stats.delivered(),
+        ticker_stats.dropped(),
+        ticker_stats.drop_rate()
+    );
 
     // ═══════════════════════════════════════════════════════════════════════
     // FEATURE 7: Orderbook Checksum Validation (requires 'checksum' feature)
@@ -238,14 +250,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let checksum = ob.calculate_checksum();
             println!("   Calculated Checksum: 0x{:08X}", checksum);
             println!("   Last Checksum:       0x{:08X}", ob.last_checksum);
-            println!("   Checksum Valid:      {}", if ob.checksum_valid { "✅ Yes" } else { "❌ No" });
-            
+            println!(
+                "   Checksum Valid:      {}",
+                if ob.checksum_valid {
+                    "✅ Yes"
+                } else {
+                    "❌ No"
+                }
+            );
+
             // Show validation helper
             let is_valid = client.is_orderbook_valid("BTC/USD");
             println!("   is_orderbook_valid(): {:?}", is_valid);
         }
     }
-    
+
     #[cfg(not(feature = "checksum"))]
     {
         println!("\n═══════════════════════════════════════════════════════════════");
@@ -276,8 +295,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   │  Bid Volume:   {:<18.4} BTC │", metrics.bid_volume);
         println!("   │  Ask Volume:   {:<18.4} BTC │", metrics.ask_volume);
         println!("   │  Bid/Ask Ratio: {:<17.4}   │", metrics.bid_ask_ratio);
-        println!("   │  Imbalance:     {:>+17.2}%   │", metrics.imbalance_ratio * 100.0);
-        println!("   │  Signal:       {:<18}  │", signal_str.split(" (").next().unwrap());
+        println!(
+            "   │  Imbalance:     {:>+17.2}%   │",
+            metrics.imbalance_ratio * 100.0
+        );
+        println!(
+            "   │  Signal:       {:<18}  │",
+            signal_str.split(" (").next().unwrap()
+        );
         println!("   └─────────────────────────────────────┘");
         println!();
         println!("   Signal Interpretation: {}", signal_str);
@@ -308,7 +333,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   Sequence: {}", ob.sequence);
         println!("   Bid levels: {}", ob.bids.len());
         println!("   Ask levels: {}", ob.asks.len());
-        
+
         if let (Some(bid), Some(ask)) = (ob.best_bid(), ob.best_ask()) {
             println!();
             println!("   ┌─────────────────────────────────────┐");

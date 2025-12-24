@@ -61,12 +61,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "telegram")]
     bot.send_connection_status(
         true,
-        &format!("🐋 Whale Watcher started!\nMonitoring {} for orders >= {} BTC",
-            trading_pair, whale_threshold_btc)
-    ).await?;
+        &format!(
+            "🐋 Whale Watcher started!\nMonitoring {} for orders >= {} BTC",
+            trading_pair, whale_threshold_btc
+        ),
+    )
+    .await?;
 
     // Subscribe to orderbook
-    println!("📊 Subscribing to {} orderbook (depth: 25)...", trading_pair);
+    println!(
+        "📊 Subscribing to {} orderbook (depth: 25)...",
+        trading_pair
+    );
     let mut orderbook_sub = client.subscribe_orderbook(trading_pair, 25).await?;
     println!("✅ Subscribed\n");
 
@@ -101,12 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         #[cfg(feature = "telegram")]
                         {
-                            bot.send_whale_alert(
-                                trading_pair,
-                                "bid",
-                                price_f64,
-                                *volume
-                            ).await?;
+                            bot.send_whale_alert(trading_pair, "bid", price_f64, *volume)
+                                .await?;
                         }
 
                         break; // Only alert once per check
@@ -128,12 +130,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         #[cfg(feature = "telegram")]
                         {
-                            bot.send_whale_alert(
-                                trading_pair,
-                                "ask",
-                                price_f64,
-                                *volume
-                            ).await?;
+                            bot.send_whale_alert(trading_pair, "ask", price_f64, *volume)
+                                .await?;
                         }
 
                         break; // Only alert once per check
@@ -142,8 +140,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Periodic status update
                 if update_count % 100 == 0 {
-                    println!("📊 Status: {} updates | {} whales detected",
-                        update_count, whale_count);
+                    println!(
+                        "📊 Status: {} updates | {} whales detected",
+                        update_count, whale_count
+                    );
                 }
             }
 

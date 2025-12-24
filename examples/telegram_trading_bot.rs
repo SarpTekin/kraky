@@ -47,8 +47,7 @@
 //! - To enable real trading, set ENABLE_REAL_TRADING=true
 
 use kraky::{
-    KrakyClient, Credentials, OrderParams, OrderSide, OrderType,
-    TelegramNotifier, AmendOrderParams,
+    AmendOrderParams, Credentials, KrakyClient, OrderParams, OrderSide, OrderType, TelegramNotifier,
 };
 
 #[tokio::main]
@@ -70,8 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚙️  Loading configuration...\n");
 
     // Kraken API credentials
-    let api_key = std::env::var("KRAKEN_API_KEY")
-        .expect("Please set KRAKEN_API_KEY environment variable");
+    let api_key =
+        std::env::var("KRAKEN_API_KEY").expect("Please set KRAKEN_API_KEY environment variable");
     let api_secret = std::env::var("KRAKEN_API_SECRET")
         .expect("Please set KRAKEN_API_SECRET environment variable");
 
@@ -117,9 +116,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "🤖 Trading Bot started!\n\
             Mode: {}\n\
             Ready to execute orders via WebSocket",
-            if enable_real_trading { "⚠️ LIVE TRADING" } else { "✅ Validation Only" }
-        )
-    ).await?;
+            if enable_real_trading {
+                "⚠️ LIVE TRADING"
+            } else {
+                "✅ Validation Only"
+            }
+        ),
+    )
+    .await?;
 
     // ═══════════════════════════════════════════════════════════════════════
     // STEP 3: Demonstrate Trading Operations
@@ -135,8 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📌 DEMO 1: Market Buy Order");
     println!("{}", "─".repeat(70));
 
-    let market_buy = OrderParams::market_buy("BTC/USD", 0.001)
-        .with_validate(!enable_real_trading);  // Validate only unless real trading enabled
+    let market_buy = OrderParams::market_buy("BTC/USD", 0.001).with_validate(!enable_real_trading); // Validate only unless real trading enabled
 
     println!("   Placing market buy order...");
     println!("   Symbol: BTC/USD");
@@ -198,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let amend = AmendOrderParams {
                 order_id: response.order_id.clone(),
                 order_qty: None,
-                limit_price: Some(106000.0),  // Increase price
+                limit_price: Some(106000.0), // Increase price
                 trigger_price: None,
             };
 
@@ -233,11 +236,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("   ✅ Order cancelled!");
                     println!("   Success: {}", cancel_response.success);
 
-                    bot.send_order_cancelled(
-                        "BTC/USD",
-                        &response.order_id,
-                        Some("Demo completed")
-                    ).await?;
+                    bot.send_order_cancelled("BTC/USD", &response.order_id, Some("Demo completed"))
+                        .await?;
                 }
                 Err(e) => {
                     println!("   ❌ Cancellation failed: {}", e);
@@ -260,13 +260,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "─".repeat(70));
 
     println!("   Simulating order fill...");
-    bot.send_order_filled(
-        "BTC/USD",
-        &OrderSide::Buy,
-        0.001,
-        100500.0,
-        "demo-fill-001"
-    ).await?;
+    bot.send_order_filled("BTC/USD", &OrderSide::Buy, 0.001, 100500.0, "demo-fill-001")
+        .await?;
     println!("   ✅ Fill notification sent to Telegram");
 
     // ───────────────────────────────────────────────────────────────────────
@@ -280,11 +275,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("   Sending daily summary...");
     bot.send_trading_summary(
-        5,           // 5 trades today
-        1250.50,     // $1,250.50 volume
-        45.75,       // +$45.75 profit
-        80.0         // 80% win rate
-    ).await?;
+        5,       // 5 trades today
+        1250.50, // $1,250.50 volume
+        45.75,   // +$45.75 profit
+        80.0,    // 80% win rate
+    )
+    .await?;
     println!("   ✅ Summary sent to Telegram");
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -308,10 +304,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // Send completion notification
-    bot.send_connection_status(
-        false,
-        "🤖 Trading Bot demo completed successfully!"
-    ).await?;
+    bot.send_connection_status(false, "🤖 Trading Bot demo completed successfully!")
+        .await?;
 
     client.disconnect();
     println!("👋 Disconnected from Kraken\n");

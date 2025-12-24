@@ -36,7 +36,7 @@
 //! - **Real-world application** - Practical trading alert system
 //! - **Lightweight** - Only 800KB added when enabled
 
-use kraky::{KrakyClient, ImbalanceSignal, TelegramNotifier, ConnectionEvent};
+use kraky::{ConnectionEvent, ImbalanceSignal, KrakyClient, TelegramNotifier};
 use std::time::Duration;
 
 #[tokio::main]
@@ -65,7 +65,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📱 Telegram Configuration:");
     println!("   Chat ID: {}", chat_id);
-    println!("   Bot Token: {}...{}", &bot_token[..8], &bot_token[bot_token.len()-4..]);
+    println!(
+        "   Bot Token: {}...{}",
+        &bot_token[..8],
+        &bot_token[bot_token.len() - 4..]
+    );
     println!();
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -83,8 +87,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Send startup notification
     bot.send_connection_status(
         true,
-        "🐙 Kraky Imbalance Bot started!\nMonitoring BTC/USD orderbook..."
-    ).await?;
+        "🐙 Kraky Imbalance Bot started!\nMonitoring BTC/USD orderbook...",
+    )
+    .await?;
 
     // ═══════════════════════════════════════════════════════════════════════
     // SUBSCRIBE: Set up connection events monitoring
@@ -139,20 +144,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let imbalance_threshold = 0.15; // 15% imbalance triggers alert
     let price_check_interval = Duration::from_secs(30);
     let price_threshold_high = 100_000.0; // Alert if price goes above $100k
-    let price_threshold_low = 95_000.0;   // Alert if price goes below $95k
+    let price_threshold_low = 95_000.0; // Alert if price goes below $95k
 
     // NEW: Advanced alert thresholds
     let whale_volume_threshold = 10.0; // 10 BTC = whale order
     let spread_multiplier_threshold = 3.0; // 3x normal spread = alert
 
-    println!("   Imbalance Threshold: ±{:.0}%", imbalance_threshold * 100.0);
+    println!(
+        "   Imbalance Threshold: ±{:.0}%",
+        imbalance_threshold * 100.0
+    );
     println!("   Price Alert High: ${:.2}", price_threshold_high);
     println!("   Price Alert Low: ${:.2}", price_threshold_low);
     println!("   Price Check Interval: {:?}", price_check_interval);
-    println!("   Whale Volume Threshold: {:.1} BTC", whale_volume_threshold);
-    println!("   Spread Alert Multiplier: {:.1}x\n", spread_multiplier_threshold);
+    println!(
+        "   Whale Volume Threshold: {:.1} BTC",
+        whale_volume_threshold
+    );
+    println!(
+        "   Spread Alert Multiplier: {:.1}x\n",
+        spread_multiplier_threshold
+    );
 
-    println!("🚀 Bot is now running! Monitoring {} for imbalance signals...", trading_pair);
+    println!(
+        "🚀 Bot is now running! Monitoring {} for imbalance signals...",
+        trading_pair
+    );
     println!("   Press Ctrl+C to stop\n");
 
     // ═══════════════════════════════════════════════════════════════════════

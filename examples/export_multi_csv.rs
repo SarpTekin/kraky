@@ -17,12 +17,11 @@
 //!
 //! ## Setup
 //! ```bash
-//! cargo run --example export_multi_csv --features trades,analytics
+//! cargo run --example export_multi_csv --features analytics
 //! ```
 //!
 //! ## Output Files (per pair)
 //! - `orderbook_<PAIR>_<TIMESTAMP>.csv` - Orderbook snapshots
-//! - `trades_<PAIR>_<TIMESTAMP>.csv` - Individual trades
 //!
 //! ## CSV Format
 //!
@@ -31,51 +30,35 @@
 //! timestamp,pair,best_bid,best_ask,spread,mid_price,imbalance,bid_volume,ask_volume
 //! 2024-01-15T10:30:00.123Z,BTC/USD,42500.0,42501.5,1.5,42500.75,0.15,12.5,10.8
 //! ```
-//!
-//! ### Trades CSV:
-//! ```csv
-//! timestamp,pair,price,quantity,side,trade_id
-//! 2024-01-15T10:30:00.123Z,BTC/USD,42501.0,0.5,buy,12345678
-//! ```
 
 use kraky::KrakyClient;
-
-#[cfg(feature = "trades")]
-use kraky::TradeSide;
-
+use chrono::Utc;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
-use std::collections::HashMap;
-use chrono::Utc;
 
 struct PairExporter {
     pair: String,
     orderbook_file: File,
-    trades_file: File,
     orderbook_count: usize,
-    trades_count: usize,
 }
 
 impl PairExporter {
     fn new(pair: &str, timestamp: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let pair_filename = pair.replace('/', "");
-
         let orderbook_filename = format!("orderbook_{}_{}.csv", pair_filename, timestamp);
-        let trades_filename = format!("trades_{}_{}.csv", pair_filename, timestamp);
-
         let mut orderbook_file = File::create(&orderbook_filename)?;
-        let mut trades_file = File::create(&trades_filename)?;
 
         // Write headers
-        writeln!(orderbook_file, "timestamp,pair,best_bid,best_ask,spread,mid_price,imbalance,bid_volume,ask_volume")?;
-        writeln!(trades_file, "timestamp,pair,price,quantity,side,trade_id")?;
+        writeln!(
+            orderbook_file,
+            "timestamp,pair,best_bid,best_ask,spread,mid_price,imbalance,bid_volume,ask_volume"
+        )?;
 
         Ok(Self {
             pair: pair.to_string(),
             orderbook_file,
-            trades_file,
             orderbook_count: 0,
-            trades_count: 0,
         })
     }
 }
@@ -96,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚙️  Configuration:");
     println!("   Pairs: {}", pairs.join(", "));
     println!("   Duration: {} seconds", duration_secs);
-    println!("   Export: Orderbook + Trades per pair\n");
+    println!("   Export: Orderbook snapshots per pair\n");
 
     // Create timestamped filenames
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
@@ -108,8 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for pair in &pairs {
         let exporter = PairExporter::new(pair, &timestamp.to_string())?;
         let pair_filename = pair.replace('/', "");
-        println!("   ✅ {}: orderbook_{}_{}.csv + trades_{}_{}.csv",
-            pair, pair_filename, timestamp, pair_filename, timestamp);
+        println!("   ✅ {}: orderbook_{}_{}.csv", pair, pair_filename, timestamp);
         exporters.insert(pair.to_string(), exporter);
     }
     println!();
@@ -133,16 +115,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         client.subscribe_orderbook(pair, 10).await?;
         println!("   ✅ Orderbook: {}", pair);
     }
-
-    // Subscribe to trades
-    #[cfg(feature = "trades")]
-    let mut trade_subscriptions = Vec::new();
-    #[cfg(feature = "trades")]
-    for pair in &pairs {
-        let sub = client.subscribe_trades(pair).await?;
-        trade_subscriptions.push((pair.to_string(), sub));
-        println!("   ✅ Trades: {}", pair);
-    }
     println!();
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -157,7 +129,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let duration = tokio::time::Duration::from_secs(duration_secs);
 
     let mut total_orderbook = 0;
-    let mut total_trades = 0;
 
     loop {
         // Check if duration exceeded
@@ -197,8 +168,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     writeln!(
                         exporter.orderbook_file,
                         "{},{},{},{},{},{},{:.4},{:.4},{:.4}",
-                        timestamp, pair, best_bid, best_ask, spread, mid_price,
-                        imbalance, bid_volume, ask_volume
+                        timestamp,
+                        pair,
+                        best_bid,
+                        best_ask,
+                        spread,
+                        mid_price,
+                        imbalance,
+                        bid_volume,
+                        ask_volume
                     )?;
 
                     exporter.orderbook_count += 1;
@@ -207,48 +185,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // Process trade updates
-        #[cfg(feature = "trades")]
-        for (pair, subscription) in &mut trade_subscriptions {
-            // Non-blocking check for new trades
-            if let Ok(trade) = subscription.try_recv() {
-                if let Some(exporter) = exporters.get_mut(pair) {
-                    let timestamp = Utc::now().to_rfc3339();
-
-                    let side_str = match trade.side {
-                        TradeSide::Buy => "buy",
-                        TradeSide::Sell => "sell",
-                    };
-
-                    writeln!(
-                        exporter.trades_file,
-                        "{},{},{},{},{},{}",
-                        timestamp,
-                        pair,
-                        trade.price,
-                        trade.qty,
-                        side_str,
-                        trade.trade_id
-                    )?;
-
-                    exporter.trades_count += 1;
-                    total_trades += 1;
-                }
-            }
-        }
-
         // Update progress display every 50 records
-        if (total_orderbook + total_trades) % 50 == 0 {
-            print!("\r📖 Total: {} orderbook | 💱 {} trades | ",
-                total_orderbook, total_trades);
+        if total_orderbook % 50 == 0 {
+            print!("\r📖 Total: {} orderbook snapshots | ", total_orderbook);
 
             // Show per-pair counts
             for pair in &pairs {
                 if let Some(exporter) = exporters.get(*pair) {
-                    print!("{}: {}+{} | ",
-                        pair.split('/').next().unwrap(),
-                        exporter.orderbook_count,
-                        exporter.trades_count);
+                    print!("{}: {} | ", pair.split('/').next().unwrap(), exporter.orderbook_count);
                 }
             }
             std::io::stdout().flush()?;
@@ -265,9 +209,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ═══════════════════════════════════════════════════════════════════════
 
     // Flush all files
-    for (_, mut exporter) in exporters.iter_mut() {
+    for (_, exporter) in exporters.iter_mut() {
         exporter.orderbook_file.flush()?;
-        exporter.trades_file.flush()?;
     }
 
     println!("\n✅ Export completed!\n");
@@ -275,24 +218,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Summary by Pair:");
     for pair in &pairs {
         if let Some(exporter) = exporters.get(*pair) {
-            println!("   {}: {} orderbook + {} trades",
-                pair, exporter.orderbook_count, exporter.trades_count);
+            println!("   {}: {} orderbook snapshots", pair, exporter.orderbook_count);
         }
     }
     println!();
 
     println!("📊 Total Summary:");
     println!("   Total orderbook records: {}", total_orderbook);
-    println!("   Total trade records: {}", total_trades);
     println!("   Duration: {:.1}s", start_time.elapsed().as_secs_f64());
-    println!("   Files created: {} CSV files", pairs.len() * 2);
+    println!("   Files created: {} CSV files", pairs.len());
     println!();
 
     println!("📁 Files Created:");
     for pair in &pairs {
         let pair_filename = pair.replace('/', "");
         println!("   orderbook_{}_{}.csv", pair_filename, timestamp);
-        println!("   trades_{}_{}.csv", pair_filename, timestamp);
     }
     println!();
 

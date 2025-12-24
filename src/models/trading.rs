@@ -312,8 +312,7 @@ mod tests {
 
     #[test]
     fn test_validate_mode() {
-        let order = OrderParams::market_buy("BTC/USD", 0.1)
-            .with_validate(true);
+        let order = OrderParams::market_buy("BTC/USD", 0.1).with_validate(true);
 
         assert_eq!(order.validate, Some(true));
     }

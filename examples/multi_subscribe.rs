@@ -14,33 +14,33 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     println!("Connecting to Kraken WebSocket...");
-    
+
     let client = KrakyClient::connect().await?;
-    
+
     println!("Connected! Subscribing to multiple streams...\n");
-    
+
     // Subscribe to multiple pairs
     let mut btc_trades = client.subscribe_trades("BTC/USD").await?;
     let mut eth_trades = client.subscribe_trades("ETH/USD").await?;
     let mut btc_ticker = client.subscribe_ticker("BTC/USD").await?;
-    
+
     println!("Subscribed to:");
     println!("  - BTC/USD trades");
     println!("  - ETH/USD trades");
     println!("  - BTC/USD ticker");
     println!("\nWaiting for updates...\n");
-    
+
     let mut count = 0;
-    
+
     loop {
         tokio::select! {
             Some(trade) = btc_trades.next() => {
-                println!("[BTC TRADE] {} {:.6} @ ${:.2}", 
+                println!("[BTC TRADE] {} {:.6} @ ${:.2}",
                     trade.side, trade.qty, trade.price);
                 count += 1;
             }
             Some(trade) = eth_trades.next() => {
-                println!("[ETH TRADE] {} {:.6} @ ${:.2}", 
+                println!("[ETH TRADE] {} {:.6} @ ${:.2}",
                     trade.side, trade.qty, trade.price);
                 count += 1;
             }
@@ -50,16 +50,15 @@ async fn main() -> anyhow::Result<()> {
                 count += 1;
             }
         }
-        
+
         if count >= 20 {
             println!("\nReceived 20 updates, disconnecting...");
             break;
         }
     }
-    
+
     client.disconnect();
     println!("Done!");
-    
+
     Ok(())
 }
-

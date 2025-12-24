@@ -39,10 +39,10 @@
 //! 2024-01-15T10:30:00.123Z,42501.0,0.5,buy,12345678
 //! ```
 
+use chrono::Utc;
 use kraky::KrakyClient;
 use std::fs::File;
 use std::io::Write;
-use chrono::Utc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut trades_csv = File::create(&trades_file)?;
 
     // Write CSV headers
-    writeln!(ob_csv, "timestamp,best_bid,best_ask,spread,mid_price,imbalance,bid_volume,ask_volume")?;
+    writeln!(
+        ob_csv,
+        "timestamp,best_bid,best_ask,spread,mid_price,imbalance,bid_volume,ask_volume"
+    )?;
     writeln!(trades_csv, "timestamp,price,quantity,side,trade_id")?;
 
     println!("✅ CSV files created with headers\n");
@@ -218,7 +221,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("💡 Next Steps:");
     println!("   - Open CSV files in Excel/Google Sheets");
-    println!("   - Import into Python with: pd.read_csv('{}')\"", orderbook_file);
+    println!(
+        "   - Import into Python with: pd.read_csv('{}')\"",
+        orderbook_file
+    );
     println!("   - Analyze spread, imbalance, and trade patterns");
     println!("   - Use for backtesting or ML model training");
     println!();

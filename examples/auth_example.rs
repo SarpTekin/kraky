@@ -32,7 +32,7 @@
 //! This example shows the authentication infrastructure.
 //! Full WebSocket integration is in development.
 
-use kraky::{Credentials, BalanceUpdate, OrderUpdate, ExecutionUpdate};
+use kraky::{BalanceUpdate, Credentials, ExecutionUpdate, OrderUpdate};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n╔══════════════════════════════════════════════════════════════╗");
@@ -48,8 +48,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("═══════════════════════════════════════════════════════════════\n");
 
     // Load credentials from environment variables or use demo values
-    let api_key = std::env::var("KRAKEN_API_KEY")
-        .unwrap_or_else(|_| "DEMO_API_KEY_NOT_REAL".to_string());
+    let api_key =
+        std::env::var("KRAKEN_API_KEY").unwrap_or_else(|_| "DEMO_API_KEY_NOT_REAL".to_string());
     let api_secret = std::env::var("KRAKEN_API_SECRET")
         .unwrap_or_else(|_| "DEMO_API_SECRET_NOT_REAL_BASE64".to_string());
 
@@ -64,7 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let credentials = Credentials::new(api_key, api_secret);
     println!("✅ Credentials created");
-    println!("   API Key: {}...", &credentials.api_key()[..min(20, credentials.api_key().len())]);
+    println!(
+        "   API Key: {}...",
+        &credentials.api_key()[..min(20, credentials.api_key().len())]
+    );
 
     // ═══════════════════════════════════════════════════════════════════════
     // STEP 2: Generate Authentication Token
@@ -85,13 +88,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match credentials.generate_token(nonce) {
         Ok(token) => {
             println!("✅ Token generated successfully");
-            println!("   Token (first 40 chars): {}...", &token[..min(40, token.len())]);
+            println!(
+                "   Token (first 40 chars): {}...",
+                &token[..min(40, token.len())]
+            );
             println!("\n   This token would be sent in WebSocket subscription:");
             println!("   {{");
             println!("     \"method\": \"subscribe\",");
             println!("     \"params\": {{");
             println!("       \"channel\": \"balances\",");
-            println!("       \"token\": \"{}...\"", &token[..min(20, token.len())]);
+            println!(
+                "       \"token\": \"{}...\"",
+                &token[..min(20, token.len())]
+            );
             println!("     }}");
             println!("   }}");
         }
@@ -230,5 +239,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn min(a: usize, b: usize) -> usize {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }

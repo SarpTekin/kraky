@@ -4,14 +4,14 @@ use crate::error::{KrakyError, Result};
 use crate::messages::{KrakyMessage, PingRequest, SubscribeRequest, KRAKEN_WS_URL};
 use crate::subscriptions::{Subscription, SubscriptionManager, SubscriptionSender};
 
-#[cfg(feature = "orderbook")]
-use crate::models::{Orderbook, OrderbookUpdate};
-#[cfg(feature = "trades")]
-use crate::models::Trade;
 #[cfg(feature = "ticker")]
 use crate::models::Ticker;
+#[cfg(feature = "trades")]
+use crate::models::Trade;
 #[cfg(feature = "ohlc")]
 use crate::models::{Interval, OHLC};
+#[cfg(feature = "orderbook")]
+use crate::models::{Orderbook, OrderbookUpdate};
 
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
@@ -139,8 +139,8 @@ impl ReconnectConfig {
 
     /// Calculate delay for a given attempt number
     fn delay_for_attempt(&self, attempt: u32) -> Duration {
-        let delay_ms = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(attempt as i32);
+        let delay_ms =
+            self.initial_delay.as_millis() as f64 * self.backoff_multiplier.powi(attempt as i32);
         let delay = Duration::from_millis(delay_ms as u64);
         delay.min(self.max_delay)
     }
@@ -177,15 +177,15 @@ enum Command {
 }
 
 /// Kraken WebSocket client
-/// 
+///
 /// Provides a high-level interface for connecting to Kraken's WebSocket API
 /// and subscribing to market data streams.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```no_run
 /// use kraky::KrakyClient;
-/// 
+///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let client = KrakyClient::connect().await?;
@@ -226,7 +226,7 @@ pub struct KrakyClient {
 
 impl KrakyClient {
     /// Connect to Kraken WebSocket API with default reconnection settings
-    /// 
+    ///
     /// Establishes a WebSocket connection to Kraken's public data API
     /// and starts the message handling loop with automatic reconnection.
     pub async fn connect() -> Result<Self> {
@@ -254,7 +254,8 @@ impl KrakyClient {
         #[cfg(feature = "orderbook")]
         let orderbooks = Arc::new(RwLock::new(HashMap::new()));
         let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
-        let event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>> = Arc::new(RwLock::new(None));
+        let event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>> =
+            Arc::new(RwLock::new(None));
 
         // Initial connection
         let ws_stream = Self::create_connection(&url).await?;
@@ -273,7 +274,7 @@ impl KrakyClient {
             shutdown: Arc::clone(&shutdown),
             event_tx: Arc::clone(&event_tx),
         };
-        
+
         tokio::spawn(manager.run(ws_stream, command_rx));
 
         // Spawn heartbeat task
@@ -313,7 +314,7 @@ impl KrakyClient {
     /// Create a new WebSocket connection (used for initial connect and reconnect)
     async fn create_connection(url: &str) -> Result<WsStream> {
         info!("Connecting to Kraken WebSocket: {}", url);
-        
+
         // Configure WebSocket for low latency
         let ws_config = WebSocketConfig {
             write_buffer_size: 0,
@@ -322,21 +323,14 @@ impl KrakyClient {
             accept_unmasked_frames: false,
             ..Default::default()
         };
-        
-        let connector = Connector::NativeTls(
-            native_tls::TlsConnector::new()
-                .map_err(|e| KrakyError::Connection(
-                    tokio_tungstenite::tungstenite::Error::Tls(e.into())
-                ))?
-        );
-        
-        let (ws_stream, _) = connect_async_tls_with_config(
-            url,
-            Some(ws_config),
-            false,
-            Some(connector),
-        ).await?;
-        
+
+        let connector = Connector::NativeTls(native_tls::TlsConnector::new().map_err(|e| {
+            KrakyError::Connection(tokio_tungstenite::tungstenite::Error::Tls(e.into()))
+        })?);
+
+        let (ws_stream, _) =
+            connect_async_tls_with_config(url, Some(ws_config), false, Some(connector)).await?;
+
         Ok(ws_stream)
     }
 
@@ -417,7 +411,7 @@ impl KrakyClient {
         depth: u32,
     ) -> Result<Subscription<OrderbookUpdate>> {
         let (sender, subscription) = SubscriptionSender::new("book".to_string(), pair.to_string());
-        
+
         // Initialize orderbook state
         {
             let mut orderbooks = self.orderbooks.write();
@@ -433,9 +427,9 @@ impl KrakyClient {
         // Store for reconnection
         {
             let mut stored = self.stored_subscriptions.write();
-            stored.push(StoredSubscription::Orderbook { 
-                pair: pair.to_string(), 
-                depth 
+            stored.push(StoredSubscription::Orderbook {
+                pair: pair.to_string(),
+                depth,
             });
         }
 
@@ -463,8 +457,8 @@ impl KrakyClient {
         // Store for reconnection
         {
             let mut stored = self.stored_subscriptions.write();
-            stored.push(StoredSubscription::Trades { 
-                pair: pair.to_string() 
+            stored.push(StoredSubscription::Trades {
+                pair: pair.to_string(),
             });
         }
 
@@ -481,7 +475,8 @@ impl KrakyClient {
     /// Only available when the `ticker` feature is enabled.
     #[cfg(feature = "ticker")]
     pub async fn subscribe_ticker(&self, pair: &str) -> Result<Subscription<Ticker>> {
-        let (sender, subscription) = SubscriptionSender::new("ticker".to_string(), pair.to_string());
+        let (sender, subscription) =
+            SubscriptionSender::new("ticker".to_string(), pair.to_string());
 
         {
             let mut subs = self.subscriptions.write();
@@ -491,8 +486,8 @@ impl KrakyClient {
         // Store for reconnection
         {
             let mut stored = self.stored_subscriptions.write();
-            stored.push(StoredSubscription::Ticker { 
-                pair: pair.to_string() 
+            stored.push(StoredSubscription::Ticker {
+                pair: pair.to_string(),
             });
         }
 
@@ -523,9 +518,9 @@ impl KrakyClient {
         // Store for reconnection
         {
             let mut stored = self.stored_subscriptions.write();
-            stored.push(StoredSubscription::OHLC { 
-                pair: pair.to_string(), 
-                interval: interval.minutes() 
+            stored.push(StoredSubscription::OHLC {
+                pair: pair.to_string(),
+                interval: interval.minutes(),
             });
         }
 
@@ -543,15 +538,15 @@ impl KrakyClient {
     }
 
     /// Check if the orderbook for a pair has a valid checksum
-    /// 
+    ///
     /// Returns `None` if no orderbook exists for the pair.
     /// Returns `Some(true)` if the last checksum validation passed.
     /// Returns `Some(false)` if the orderbook might be corrupted.
-    /// 
+    ///
     /// Only available when the `checksum` feature is enabled.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```ignore
     /// if client.is_orderbook_valid("BTC/USD") == Some(false) {
     ///     // Orderbook is corrupted, trigger reconnect
@@ -564,14 +559,15 @@ impl KrakyClient {
     }
 
     /// Validate all orderbooks and reconnect if any are corrupted
-    /// 
+    ///
     /// Returns the number of corrupted orderbooks found.
     /// If any are corrupted, a reconnection is triggered automatically.
-    /// 
+    ///
     /// Only available when the `checksum` feature is enabled.
     #[cfg(feature = "checksum")]
     pub fn validate_orderbooks_and_reconnect(&self) -> Result<usize> {
-        let corrupted: Vec<String> = self.orderbooks
+        let corrupted: Vec<String> = self
+            .orderbooks
             .read()
             .iter()
             .filter(|(_, ob)| !ob.checksum_valid)
@@ -579,7 +575,7 @@ impl KrakyClient {
             .collect();
 
         let count = corrupted.len();
-        
+
         if count > 0 {
             warn!(
                 "Found {} corrupted orderbook(s): {:?}. Triggering reconnect.",
@@ -742,9 +738,7 @@ impl KrakyClient {
             .map_err(|e| KrakyError::ChannelSend(e.to_string()))?;
 
         // Return placeholder
-        Ok(CancelAllResponse {
-            count: 0,
-        })
+        Ok(CancelAllResponse { count: 0 })
     }
 
     /// Amend (modify) an existing order
@@ -803,16 +797,17 @@ impl KrakyClient {
     }
 
     /// Disconnect from the WebSocket (lock-free)
-    /// 
+    ///
     /// This will stop reconnection attempts and close the connection.
     pub fn disconnect(&self) {
         self.shutdown.store(true, Ordering::SeqCst);
-        self.state.store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
+        self.state
+            .store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
         let _ = self.command_tx.send(Command::Shutdown);
     }
 
     /// Manually trigger a reconnection
-    /// 
+    ///
     /// Useful if you want to force a fresh connection.
     pub fn reconnect(&self) -> Result<()> {
         if self.shutdown.load(Ordering::Relaxed) {
@@ -860,7 +855,7 @@ impl ConnectionManager {
         let mut ws_stream = Some(initial_stream);
         let mut reconnect_attempt = 0u32;
         let mut pending_commands: Vec<Command> = Vec::new();
-        
+
         // Emit initial connected event
         self.emit_event(ConnectionEvent::Connected);
 
@@ -868,22 +863,24 @@ impl ConnectionManager {
             // Check shutdown flag
             if self.shutdown.load(Ordering::Relaxed) {
                 info!("Connection manager shutting down");
-                self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown requested".to_string())));
+                self.emit_event(ConnectionEvent::Disconnected(Some(
+                    "Shutdown requested".to_string(),
+                )));
                 break;
             }
 
             // If we have a connection, run the message loop
             if let Some(stream) = ws_stream.take() {
-                let disconnect_reason = self.run_message_loop(
-                    stream,
-                    &mut command_rx,
-                    &mut pending_commands,
-                ).await;
+                let disconnect_reason = self
+                    .run_message_loop(stream, &mut command_rx, &mut pending_commands)
+                    .await;
 
                 let disconnect_msg = match &disconnect_reason {
                     DisconnectReason::Shutdown => {
                         info!("WebSocket handler shut down");
-                        self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown".to_string())));
+                        self.emit_event(ConnectionEvent::Disconnected(Some(
+                            "Shutdown".to_string(),
+                        )));
                         break;
                     }
                     DisconnectReason::ServerClose => {
@@ -912,7 +909,8 @@ impl ConnectionManager {
 
                 // Should we reconnect?
                 if !self.reconnect_config.enabled || self.shutdown.load(Ordering::Relaxed) {
-                    self.state.store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
+                    self.state
+                        .store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
                     break;
                 }
 
@@ -921,35 +919,43 @@ impl ConnectionManager {
                     if reconnect_attempt >= max {
                         error!("Max reconnection attempts ({}) reached, giving up", max);
                         self.emit_event(ConnectionEvent::ReconnectExhausted);
-                        self.state.store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
+                        self.state
+                            .store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
                         break;
                     }
                 }
 
                 // Attempt reconnection
-                self.state.store(ConnectionState::Reconnecting as u8, Ordering::SeqCst);
+                self.state
+                    .store(ConnectionState::Reconnecting as u8, Ordering::SeqCst);
                 self.emit_event(ConnectionEvent::Reconnecting(reconnect_attempt + 1));
-                
+
                 let delay = self.reconnect_config.delay_for_attempt(reconnect_attempt);
                 info!(
                     "Reconnecting in {:?} (attempt {}/{})",
                     delay,
                     reconnect_attempt + 1,
-                    self.reconnect_config.max_attempts.map(|m| m.to_string()).unwrap_or_else(|| "∞".to_string())
+                    self.reconnect_config
+                        .max_attempts
+                        .map(|m| m.to_string())
+                        .unwrap_or_else(|| "∞".to_string())
                 );
-                
+
                 tokio::time::sleep(delay).await;
 
                 // Check shutdown again after sleep
                 if self.shutdown.load(Ordering::Relaxed) {
-                    self.emit_event(ConnectionEvent::Disconnected(Some("Shutdown during reconnect".to_string())));
+                    self.emit_event(ConnectionEvent::Disconnected(Some(
+                        "Shutdown during reconnect".to_string(),
+                    )));
                     break;
                 }
 
                 match KrakyClient::create_connection(&self.url).await {
                     Ok(new_stream) => {
                         info!("Reconnection successful!");
-                        self.state.store(ConnectionState::Connected as u8, Ordering::SeqCst);
+                        self.state
+                            .store(ConnectionState::Connected as u8, Ordering::SeqCst);
                         self.emit_event(ConnectionEvent::Reconnected);
                         reconnect_attempt = 0;
                         ws_stream = Some(new_stream);
@@ -959,8 +965,15 @@ impl ConnectionManager {
                     }
                     Err(e) => {
                         let err_msg = e.to_string();
-                        warn!("Reconnection attempt {} failed: {}", reconnect_attempt + 1, err_msg);
-                        self.emit_event(ConnectionEvent::ReconnectFailed(reconnect_attempt + 1, err_msg));
+                        warn!(
+                            "Reconnection attempt {} failed: {}",
+                            reconnect_attempt + 1,
+                            err_msg
+                        );
+                        self.emit_event(ConnectionEvent::ReconnectFailed(
+                            reconnect_attempt + 1,
+                            err_msg,
+                        ));
                         reconnect_attempt += 1;
                         ws_stream = None;
                     }
@@ -971,13 +984,14 @@ impl ConnectionManager {
             }
         }
 
-        self.state.store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
+        self.state
+            .store(ConnectionState::Disconnected as u8, Ordering::SeqCst);
     }
 
     fn resubscribe_all(&self, pending_commands: &mut Vec<Command>) {
         let subs = self.stored_subscriptions.read();
         info!("Re-subscribing to {} subscriptions", subs.len());
-        
+
         for sub in subs.iter() {
             let request = match sub {
                 #[cfg(feature = "orderbook")]
@@ -992,13 +1006,9 @@ impl ConnectionManager {
                     SubscribeRequest::orderbook(vec![pair.clone()], *depth)
                 }
                 #[cfg(feature = "trades")]
-                StoredSubscription::Trades { pair } => {
-                    SubscribeRequest::trades(vec![pair.clone()])
-                }
+                StoredSubscription::Trades { pair } => SubscribeRequest::trades(vec![pair.clone()]),
                 #[cfg(feature = "ticker")]
-                StoredSubscription::Ticker { pair } => {
-                    SubscribeRequest::ticker(vec![pair.clone()])
-                }
+                StoredSubscription::Ticker { pair } => SubscribeRequest::ticker(vec![pair.clone()]),
                 #[cfg(feature = "ohlc")]
                 StoredSubscription::OHLC { pair, interval } => {
                     SubscribeRequest::ohlc(vec![pair.clone()], *interval)
@@ -1114,7 +1124,12 @@ impl ConnectionManager {
                 KrakyMessage::Pong { req_id } => {
                     debug!("Received pong (req_id: {:?})", req_id);
                 }
-                KrakyMessage::SubscriptionStatus { success, channel, symbol, error } => {
+                KrakyMessage::SubscriptionStatus {
+                    success,
+                    channel,
+                    symbol,
+                    error,
+                } => {
                     if success {
                         info!("Subscribed to {} for {:?}", channel, symbol);
                     } else if let Some(err_str) = error {
@@ -1125,10 +1140,7 @@ impl ConnectionManager {
                                 channel, parsed.severity, parsed.category, parsed.message
                             );
                         } else if parsed.is_invalid_pair() {
-                            error!(
-                                "Invalid trading pair for {}: {}",
-                                channel, parsed.message
-                            );
+                            error!("Invalid trading pair for {}: {}", channel, parsed.message);
                         } else if parsed.is_rate_limited() {
                             warn!("Rate limited on {} subscription", channel);
                         } else {
@@ -1225,16 +1237,16 @@ mod tests {
     #[test]
     fn test_exponential_backoff() {
         let config = ReconnectConfig::default();
-        
+
         // First attempt: 500ms
         assert_eq!(config.delay_for_attempt(0), Duration::from_millis(500));
-        
+
         // Second attempt: 1000ms
         assert_eq!(config.delay_for_attempt(1), Duration::from_millis(1000));
-        
+
         // Third attempt: 2000ms
         assert_eq!(config.delay_for_attempt(2), Duration::from_millis(2000));
-        
+
         // Should cap at max_delay
         assert_eq!(config.delay_for_attempt(10), Duration::from_secs(30));
     }
@@ -1248,4 +1260,3 @@ mod tests {
         assert_eq!(ConnectionState::from(255), ConnectionState::Disconnected); // Invalid -> Disconnected
     }
 }
-

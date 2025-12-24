@@ -1,12 +1,12 @@
 //! Subscription stream handling with backpressure control
 
 use crate::error::{KrakyError, Result};
+use futures_util::Stream;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc;
-use futures_util::Stream;
 
 /// Default buffer size for subscription channels
 pub const DEFAULT_BUFFER_SIZE: usize = 1000;
@@ -67,17 +67,17 @@ impl SubscriptionStats {
 }
 
 /// A subscription to a Kraken data stream
-/// 
+///
 /// Subscriptions are async streams that yield data as it arrives from
 /// the Kraken WebSocket API. They can be consumed using the `next()` method
 /// or by treating them as a `Stream`.
-/// 
+///
 /// # Backpressure
-/// 
+///
 /// Subscriptions use bounded channels to prevent memory issues. If the consumer
 /// is too slow, older messages will be dropped to keep the most recent data.
 /// Use `stats()` to monitor dropped messages.
-/// 
+///
 /// # Example
 ///
 /// ```no_run
@@ -108,26 +108,34 @@ pub struct Subscription<T> {
 
 impl<T> Subscription<T> {
     /// Create a new subscription
-    pub(crate) fn new(receiver: mpsc::Receiver<T>, id: String, stats: Arc<SubscriptionStats>) -> Self {
-        Self { receiver, id, stats }
+    pub(crate) fn new(
+        receiver: mpsc::Receiver<T>,
+        id: String,
+        stats: Arc<SubscriptionStats>,
+    ) -> Self {
+        Self {
+            receiver,
+            id,
+            stats,
+        }
     }
 
     /// Get the next item from the subscription
-    /// 
+    ///
     /// Returns `None` if the subscription has been closed.
     pub async fn next(&mut self) -> Option<T> {
         self.receiver.recv().await
     }
 
     /// Get the subscription ID
-    /// 
+    ///
     /// The ID is a unique identifier for this subscription instance.
     pub fn id(&self) -> &str {
         &self.id
     }
 
     /// Get subscription statistics
-    /// 
+    ///
     /// Returns stats including delivered and dropped message counts.
     /// Use this to monitor backpressure and adjust consumption rate if needed.
     pub fn stats(&self) -> &SubscriptionStats {
@@ -162,11 +170,15 @@ impl<T> SubscriptionSender<T> {
     }
 
     /// Create a new subscription pair with custom backpressure config
-    pub fn with_config(channel: String, symbol: String, config: BackpressureConfig) -> (Self, Subscription<T>) {
+    pub fn with_config(
+        channel: String,
+        symbol: String,
+        config: BackpressureConfig,
+    ) -> (Self, Subscription<T>) {
         let (sender, receiver) = mpsc::channel(config.buffer_size);
         let id = format!("{}-{}-{}", channel, symbol, uuid::Uuid::new_v4());
         let stats = Arc::new(SubscriptionStats::default());
-        
+
         let subscription = Subscription::new(receiver, id.clone(), Arc::clone(&stats));
         let sender = Self {
             sender,
@@ -175,12 +187,12 @@ impl<T> SubscriptionSender<T> {
             symbol,
             stats,
         };
-        
+
         (sender, subscription)
     }
 
     /// Send data to the subscription (non-blocking with backpressure)
-    /// 
+    ///
     /// If the channel buffer is full, this will drop the message and
     /// increment the dropped counter. The WebSocket handler is never blocked.
     pub fn send(&self, data: T) -> Result<()> {
@@ -315,10 +327,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscription_sender_receiver() {
-        let (sender, mut subscription) = SubscriptionSender::<String>::new(
-            "test".to_string(),
-            "BTC/USD".to_string(),
-        );
+        let (sender, mut subscription) =
+            SubscriptionSender::<String>::new("test".to_string(), "BTC/USD".to_string());
 
         // Send a message
         sender.send("hello".to_string()).unwrap();
@@ -330,10 +340,8 @@ mod tests {
 
     #[test]
     fn test_subscription_id_format() {
-        let (sender, subscription) = SubscriptionSender::<String>::new(
-            "book".to_string(),
-            "BTC/USD".to_string(),
-        );
+        let (sender, subscription) =
+            SubscriptionSender::<String>::new("book".to_string(), "BTC/USD".to_string());
 
         assert!(subscription.id().starts_with("book-BTC/USD-"));
         assert!(sender.symbol == "BTC/USD");
@@ -353,7 +361,7 @@ mod tests {
         sender.send("msg1".to_string()).unwrap();
         sender.send("msg2".to_string()).unwrap();
         sender.send("msg3".to_string()).unwrap();
-        
+
         // This should be dropped (buffer full)
         sender.send("msg4".to_string()).unwrap();
         sender.send("msg5".to_string()).unwrap();
@@ -361,7 +369,7 @@ mod tests {
         // Check stats
         assert_eq!(subscription.stats().delivered(), 3);
         assert_eq!(subscription.stats().dropped(), 2);
-        
+
         // Consume the buffered messages
         assert_eq!(subscription.next().await, Some("msg1".to_string()));
         assert_eq!(subscription.next().await, Some("msg2".to_string()));
@@ -371,14 +379,14 @@ mod tests {
     #[test]
     fn test_drop_rate_calculation() {
         let stats = SubscriptionStats::default();
-        
+
         // No messages yet
         assert_eq!(stats.drop_rate(), 0.0);
-        
+
         // Simulate some deliveries and drops
         stats.delivered.store(80, Ordering::Relaxed);
         stats.dropped.store(20, Ordering::Relaxed);
-        
+
         // 20 / 100 = 20%
         assert!((stats.drop_rate() - 20.0).abs() < 0.001);
     }

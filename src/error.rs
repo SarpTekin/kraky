@@ -1,9 +1,9 @@
 //! Error types for the Kraky SDK
-//! 
+//!
 //! Provides structured error handling with Kraken-specific error parsing.
 
-use thiserror::Error;
 use std::fmt;
+use thiserror::Error;
 
 /// Result type alias for Kraky operations
 pub type Result<T> = std::result::Result<T, KrakyError>;
@@ -69,10 +69,10 @@ impl fmt::Display for KrakenCategory {
 }
 
 /// Parsed Kraken API error
-/// 
+///
 /// Kraken returns errors in the format: `"SeverityCategory:Message"`
 /// For example: `"EQuery:Unknown asset pair"` or `"EService:Unavailable"`
-/// 
+///
 /// This struct parses that format into structured fields for easier handling.
 #[derive(Debug, Clone)]
 pub struct KrakenApiError {
@@ -88,18 +88,18 @@ pub struct KrakenApiError {
 
 impl KrakenApiError {
     /// Parse a Kraken error string into structured error
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use kraky::KrakenApiError;
-    /// 
+    ///
     /// let err = KrakenApiError::parse("EQuery:Unknown asset pair");
     /// assert_eq!(err.message, "Unknown asset pair");
     /// ```
     pub fn parse(error: &str) -> Self {
         let raw = error.to_string();
-        
+
         // Try to parse format: "ECategory:Message"
         if error.len() >= 2 {
             let severity = match error.chars().next() {
@@ -107,12 +107,12 @@ impl KrakenApiError {
                 Some('W') => KrakenSeverity::Warning,
                 _ => KrakenSeverity::Unknown,
             };
-            
+
             // Find the colon separator
             if let Some(colon_pos) = error.find(':') {
                 let category_str = &error[1..colon_pos];
                 let message = error[colon_pos + 1..].trim().to_string();
-                
+
                 let category = match category_str {
                     "Query" => KrakenCategory::Query,
                     "Service" => KrakenCategory::Service,
@@ -124,7 +124,7 @@ impl KrakenApiError {
                     "General" => KrakenCategory::General,
                     other => KrakenCategory::Unknown(other.to_string()),
                 };
-                
+
                 return Self {
                     severity,
                     category,
@@ -133,7 +133,7 @@ impl KrakenApiError {
                 };
             }
         }
-        
+
         // Fallback: couldn't parse, treat as general error
         Self {
             severity: KrakenSeverity::Error,
@@ -142,7 +142,7 @@ impl KrakenApiError {
             raw,
         }
     }
-    
+
     /// Check if this is a temporary/retryable error
     pub fn is_retryable(&self) -> bool {
         matches!(self.category, KrakenCategory::Service)
@@ -150,13 +150,12 @@ impl KrakenApiError {
             || self.message.contains("Busy")
             || self.message.contains("timeout")
     }
-    
+
     /// Check if this is a rate limit error
     pub fn is_rate_limited(&self) -> bool {
-        matches!(self.category, KrakenCategory::Api)
-            && self.message.contains("Rate limit")
+        matches!(self.category, KrakenCategory::Api) && self.message.contains("Rate limit")
     }
-    
+
     /// Check if this is an invalid pair error
     pub fn is_invalid_pair(&self) -> bool {
         matches!(self.category, KrakenCategory::Query)
@@ -227,11 +226,11 @@ pub enum KrakyError {
 
 impl KrakyError {
     /// Create a KrakyError from a Kraken API error string
-    /// 
+    ///
     /// Parses the error and returns the appropriate error variant.
     pub fn from_kraken_error(error: &str) -> Self {
         let parsed = KrakenApiError::parse(error);
-        
+
         // Map to specific error types for common cases
         if parsed.is_rate_limited() {
             KrakyError::RateLimited
@@ -241,7 +240,7 @@ impl KrakyError {
             KrakyError::KrakenApi(parsed)
         }
     }
-    
+
     /// Check if this error is retryable
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -314,4 +313,3 @@ mod tests {
         assert!(err.is_retryable());
     }
 }
-

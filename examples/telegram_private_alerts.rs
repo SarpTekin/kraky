@@ -26,7 +26,7 @@
 //!    cargo run --example telegram_private_alerts --features telegram,private
 //!    ```
 
-use kraky::{TelegramNotifier, BalanceUpdate, OrderUpdate, ExecutionUpdate};
+use kraky::{BalanceUpdate, ExecutionUpdate, OrderUpdate, TelegramNotifier};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,8 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
     // Get Telegram credentials
-    let bot_token = std::env::var("TELEGRAM_BOT_TOKEN")
-        .unwrap_or_else(|_| "YOUR_BOT_TOKEN".to_string());
+    let bot_token =
+        std::env::var("TELEGRAM_BOT_TOKEN").unwrap_or_else(|_| "YOUR_BOT_TOKEN".to_string());
     let chat_id: i64 = std::env::var("TELEGRAM_CHAT_ID")
         .unwrap_or_else(|_| "123456789".to_string())
         .parse()

@@ -49,7 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Telegram setup (optional)
     #[cfg(feature = "telegram")]
     let bot = {
-        match (std::env::var("TELEGRAM_BOT_TOKEN"), std::env::var("TELEGRAM_CHAT_ID")) {
+        match (
+            std::env::var("TELEGRAM_BOT_TOKEN"),
+            std::env::var("TELEGRAM_CHAT_ID"),
+        ) {
             (Ok(token), Ok(chat_id)) => {
                 let id: i64 = chat_id.parse().expect("Invalid TELEGRAM_CHAT_ID");
                 let notifier = kraky::TelegramNotifier::new(&token, id);
@@ -69,7 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Connected!\n");
 
     // Subscribe to orderbook
-    println!("📊 Subscribing to {} orderbook (depth: 100)...", trading_pair);
+    println!(
+        "📊 Subscribing to {} orderbook (depth: 100)...",
+        trading_pair
+    );
     let mut orderbook_sub = client.subscribe_orderbook(trading_pair, 100).await?;
     println!("✅ Subscribed\n");
 
@@ -125,8 +131,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Check for low liquidity
                     if total_liquidity < min_total_liquidity {
                         println!("\n⚠️  LOW LIQUIDITY WARNING!");
-                        println!("   Total: {:.2} BTC (threshold: {} BTC)",
-                            total_liquidity, min_total_liquidity);
+                        println!(
+                            "   Total: {:.2} BTC (threshold: {} BTC)",
+                            total_liquidity, min_total_liquidity
+                        );
 
                         #[cfg(feature = "telegram")]
                         if let Some(ref bot) = bot {
@@ -140,8 +148,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 Ask Volume: {:.2} BTC\n\
                                 \n\
                                 💡 Low liquidity may indicate increased volatility risk.",
-                                trading_pair, total_liquidity, min_total_liquidity,
-                                total_bid_volume, total_ask_volume
+                                trading_pair,
+                                total_liquidity,
+                                min_total_liquidity,
+                                total_bid_volume,
+                                total_ask_volume
                             );
                             let _ = bot.send_alert(&message).await;
                         }
@@ -150,18 +161,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Check for wide spread
                     if spread_bps > max_spread_bps {
                         println!("\n⚠️  WIDE SPREAD WARNING!");
-                        println!("   Spread: {:.1} bps (threshold: {} bps)",
-                            spread_bps, max_spread_bps);
+                        println!(
+                            "   Spread: {:.1} bps (threshold: {} bps)",
+                            spread_bps, max_spread_bps
+                        );
 
                         #[cfg(feature = "telegram")]
                         if let Some(ref bot) = bot {
                             if spread_bps > avg_spread * 2.0 {
-                                let _ = bot.send_spread_alert(
-                                    trading_pair,
-                                    spread_bps,
-                                    avg_spread,
-                                    spread_bps / avg_spread
-                                ).await;
+                                let _ = bot
+                                    .send_spread_alert(
+                                        trading_pair,
+                                        spread_bps,
+                                        avg_spread,
+                                        spread_bps / avg_spread,
+                                    )
+                                    .await;
                             }
                         }
                     }

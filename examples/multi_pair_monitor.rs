@@ -139,7 +139,11 @@ fn display_status(pairs: &[&str], state: &HashMap<String, PairState>) {
             println!("   Mid Price: ${:.2}", mid_price);
             println!("   Best Bid/Ask: ${:.2} / ${:.2}", s.best_bid, s.best_ask);
             println!("   Spread: ${:.2} ({:.1} bps)", s.spread, spread_bps);
-            println!("   Imbalance: {:+.2}% | Signal: {}", s.imbalance * 100.0, signal_str);
+            println!(
+                "   Imbalance: {:+.2}% | Signal: {}",
+                s.imbalance * 100.0,
+                signal_str
+            );
             println!("   Orderbook Updates: {}", s.orderbook_updates);
         }
     }

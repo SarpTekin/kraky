@@ -32,9 +32,8 @@
 //! - Complete trading workflow
 
 use kraky::{
-    OrderParams, OrderSide, OrderStatus,
-    TelegramNotifier, AmendOrderParams,
-    OrderResponse, AmendOrderResponse,
+    AmendOrderParams, AmendOrderResponse, OrderParams, OrderResponse, OrderSide, OrderStatus,
+    TelegramNotifier,
 };
 
 #[tokio::main]
@@ -72,8 +71,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         true,
         "🤖 Trading Bot Demo Started!\n\
         Mode: ✅ Demonstration Mode\n\
-        All features showcased via Telegram notifications"
-    ).await?;
+        All features showcased via Telegram notifications",
+    )
+    .await?;
     println!("✅ Connection notification sent!\n");
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -92,8 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📌 DEMO 1: Market Buy Order Notification");
     println!("{}", "─".repeat(70));
 
-    let market_buy = OrderParams::market_buy("BTC/USD", 0.001)
-        .with_validate(true);
+    let market_buy = OrderParams::market_buy("BTC/USD", 0.001).with_validate(true);
 
     let market_response = OrderResponse {
         order_id: "OBUY-12345-ABCDEF".to_string(),
@@ -165,7 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Order ID: {}", limit_response.order_id);
     println!("   New Price: $106,000.00");
 
-    bot.send_order_amended(&amend_response, &amend_params).await?;
+    bot.send_order_amended(&amend_response, &amend_params)
+        .await?;
     println!("   ✅ Notification sent to Telegram!\n");
 
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -184,8 +184,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     bot.send_order_cancelled(
         "BTC/USD",
         &limit_response.order_id,
-        Some("Demo completed - showcasing cancellation flow")
-    ).await?;
+        Some("Demo completed - showcasing cancellation flow"),
+    )
+    .await?;
     println!("   ✅ Notification sent to Telegram!\n");
 
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -208,8 +209,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &OrderSide::Buy,
         0.001,
         100500.0,
-        "OFILL-11111-ZZZZZ"
-    ).await?;
+        "OFILL-11111-ZZZZZ",
+    )
+    .await?;
     println!("   ✅ Notification sent to Telegram!\n");
 
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -229,8 +231,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bot.send_order_failed(
         &failed_order,
-        "Insufficient balance: Required 25,000 USD, Available 10,000 USD"
-    ).await?;
+        "Insufficient balance: Required 25,000 USD, Available 10,000 USD",
+    )
+    .await?;
     println!("   ✅ Notification sent to Telegram!\n");
 
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -249,11 +252,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Win Rate: 75%");
 
     bot.send_trading_summary(
-        12,         // 12 trades today
-        3456.78,    // $3,456.78 volume
-        234.56,     // +$234.56 profit
-        75.0        // 75% win rate
-    ).await?;
+        12,      // 12 trades today
+        3456.78, // $3,456.78 volume
+        234.56,  // +$234.56 profit
+        75.0,    // 75% win rate
+    )
+    .await?;
     println!("   ✅ Notification sent to Telegram!\n");
 
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -295,8 +299,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ✅ Trading Summary\n\
         ✅ Connection Status\n\
         \n\
-        Ready for your hackathon presentation! 🏆"
-    ).await?;
+        Ready for your hackathon presentation! 🏆",
+    )
+    .await?;
 
     println!("👋 Demo completed successfully!\n");
     println!("💡 TIP: The real SDK connects to Kraken's WebSocket API v2");

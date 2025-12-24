@@ -246,23 +246,24 @@ pub enum KrakyMessage {
 
 impl KrakyMessage {
     /// Parse a raw JSON message
-    /// 
+    ///
     /// Uses SIMD-accelerated parsing when the `simd` feature is enabled.
     pub fn parse(text: &str) -> Result<Self, serde_json::Error> {
         // Parse JSON - use SIMD if feature is enabled
         #[cfg(feature = "simd")]
         let value: serde_json::Value = {
             let mut bytes = text.as_bytes().to_vec();
-            simd_json::from_slice(&mut bytes)
-                .map_err(|e| serde_json::Error::io(std::io::Error::new(
+            simd_json::from_slice(&mut bytes).map_err(|e| {
+                serde_json::Error::io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    e.to_string()
-                )))?
+                    e.to_string(),
+                ))
+            })?
         };
-        
+
         #[cfg(not(feature = "simd"))]
         let value: serde_json::Value = serde_json::from_str(text)?;
-        
+
         // Check for method responses (pong, subscribe, unsubscribe)
         if let Some(method) = value.get("method").and_then(|m| m.as_str()) {
             match method {
@@ -271,8 +272,14 @@ impl KrakyMessage {
                     return Ok(KrakyMessage::Pong { req_id });
                 }
                 "subscribe" | "unsubscribe" => {
-                    let success = value.get("success").and_then(|s| s.as_bool()).unwrap_or(false);
-                    let error = value.get("error").and_then(|e| e.as_str()).map(String::from);
+                    let success = value
+                        .get("success")
+                        .and_then(|s| s.as_bool())
+                        .unwrap_or(false);
+                    let error = value
+                        .get("error")
+                        .and_then(|e| e.as_str())
+                        .map(String::from);
                     let result = value.get("result");
                     let channel = result
                         .and_then(|r| r.get("channel"))
@@ -283,7 +290,7 @@ impl KrakyMessage {
                         .and_then(|r| r.get("symbol"))
                         .and_then(|s| s.as_str())
                         .map(String::from);
-                    
+
                     return Ok(KrakyMessage::SubscriptionStatus {
                         success,
                         channel,
@@ -332,4 +339,3 @@ impl KrakyMessage {
         Ok(KrakyMessage::Unknown(value))
     }
 }
-

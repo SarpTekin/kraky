@@ -125,7 +125,7 @@ pub mod auth;
 pub mod telegram;
 
 // Re-export main types
-pub use client::{KrakyClient, ConnectionState};
+pub use client::{ConnectionState, KrakyClient};
 
 // Reconnection types (requires 'reconnect' feature)
 #[cfg(feature = "reconnect")]
@@ -136,7 +136,7 @@ pub use client::ReconnectConfig;
 pub use client::ConnectionEvent;
 
 // Error types (always available)
-pub use error::{KrakyError, KrakenApiError, KrakenSeverity, KrakenCategory, Result};
+pub use error::{KrakenApiError, KrakenCategory, KrakenSeverity, KrakyError, Result};
 
 // Data type exports (conditional on features)
 #[cfg(feature = "orderbook")]
@@ -149,7 +149,7 @@ pub use models::{Trade, TradeSide};
 pub use models::Ticker;
 
 #[cfg(feature = "ohlc")]
-pub use models::{OHLC, Interval};
+pub use models::{Interval, OHLC};
 
 // Analytics types (requires both 'orderbook' and 'analytics' features)
 #[cfg(all(feature = "orderbook", feature = "analytics"))]
@@ -161,19 +161,19 @@ pub use models::ChecksumValidation;
 
 // Private channel types (requires 'private' feature)
 #[cfg(feature = "private")]
-pub use models::{BalanceUpdate, BalanceData, OrderUpdate, OrderData, ExecutionUpdate, ExecutionData};
+pub use models::{
+    BalanceData, BalanceUpdate, ExecutionData, ExecutionUpdate, OrderData, OrderUpdate,
+};
 
 // Trading types (requires 'trading' feature)
 #[cfg(feature = "trading")]
 pub use models::{
-    OrderParams, OrderResponse, OrderSide, OrderType, OrderStatus,
-    AmendOrderParams, AmendOrderResponse,
-    CancelOrderResponse, CancelAllResponse,
-    TimeInForce, SelfTradePrevention,
+    AmendOrderParams, AmendOrderResponse, CancelAllResponse, CancelOrderResponse, OrderParams,
+    OrderResponse, OrderSide, OrderStatus, OrderType, SelfTradePrevention, TimeInForce,
 };
 
 // Subscription types (always available)
-pub use subscriptions::{Subscription, SubscriptionStats, BackpressureConfig, DEFAULT_BUFFER_SIZE};
+pub use subscriptions::{BackpressureConfig, Subscription, SubscriptionStats, DEFAULT_BUFFER_SIZE};
 
 // Authentication types (requires 'auth' feature)
 #[cfg(feature = "auth")]
@@ -182,4 +182,3 @@ pub use auth::Credentials;
 // Telegram types (requires 'telegram' feature)
 #[cfg(feature = "telegram")]
 pub use telegram::TelegramNotifier;
-
