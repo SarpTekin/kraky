@@ -10,17 +10,53 @@ keywords = ["kraken", "exchange", "websocket", "trading", "crypto"]
 categories = ["api-bindings", "asynchronous"]
 readme = "README.md"
 
+[features]
+# Default: core features (reconnect + events + orderbook)
+# Orderbook is part of default as it's tightly integrated with client infrastructure
+# Users can opt-in to additional data types (trades, ticker, ohlc)
+default = ["reconnect", "events", "orderbook"]
+
+# Data type features - opt-in for each data type
+orderbook = []
+trades = []
+ticker = []
+ohlc = []
+
+# Advanced features
+analytics = ["orderbook"]  # Requires orderbook
+reconnect = []
+events = []
+
+# Authentication features
+auth = ["dep:hmac", "dep:sha2", "dep:base64"]  # Core authentication (HMAC-SHA256 signing)
+private = ["auth"]  # Private WebSocket channels (balances, orders, executions)
+trading = ["auth", "private"]  # Order placement and management via WebSocket (Spot)
+
+# Performance features
+simd = ["dep:simd-json"]
+checksum = ["orderbook", "dep:crc32fast"]  # Requires orderbook
+
+# Telegram bot integration
+telegram = ["dep:teloxide"]
+telegram-alerts = ["telegram", "analytics", "ticker"]  # Smart alerts with imbalance signals
+
+# Convenience meta-features
+market-data = ["orderbook", "trades", "ticker", "ohlc"]
+full = ["market-data", "analytics", "reconnect", "events", "simd", "checksum", "telegram-alerts", "private", "trading"]
+
 [dependencies]
-# Async runtime
-tokio = { version = "1.35", features = ["full"] }
+# Async runtime - only the features we actually need
+tokio = { version = "1.35", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 native-tls = "0.2"
 futures-util = "0.3"
 
-# Serialization
+# Serialization (always required)
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-simd-json = "0.14"
+
+# Optional: SIMD JSON parsing for performance
+simd-json = { version = "0.14", optional = true }
 
 # Error handling
 thiserror = "1.0"
@@ -33,7 +69,17 @@ url = "2.5"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 parking_lot = "0.12"
-crc32fast = "1.3"
+
+# Optional: Checksum validation
+crc32fast = { version = "1.3", optional = true }
+
+# Optional: Authentication (HMAC-SHA256 signing)
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+base64 = { version = "0.22", optional = true }
+
+# Optional: Telegram bot integration
+teloxide = { version = "0.12", features = ["macros"], optional = true }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -43,19 +89,84 @@ tokio-test = "0.4"
 [[example]]
 name = "orderbook"
 path = "examples/orderbook.rs"
+required-features = ["orderbook"]
 
 [[example]]
 name = "trades"
 path = "examples/trades.rs"
+required-features = ["trades"]
 
 [[example]]
 name = "ticker"
 path = "examples/ticker.rs"
+required-features = ["ticker"]
 
 [[example]]
 name = "ohlc"
 path = "examples/ohlc.rs"
+required-features = ["ohlc"]
 
 [[example]]
 name = "multi_subscribe"
 path = "examples/multi_subscribe.rs"
+required-features = ["trades", "ticker"]
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+required-features = ["full"]
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+required-features = ["orderbook", "trades"]
+
+[[example]]
+name = "telegram_imbalance_bot"
+path = "examples/telegram_imbalance_bot.rs"
+required-features = ["telegram-alerts"]
+
+[[example]]
+name = "auth_example"
+path = "examples/auth_example.rs"
+required-features = ["private"]
+
+[[example]]
+name = "telegram_private_alerts"
+path = "examples/telegram_private_alerts.rs"
+required-features = ["telegram", "private"]
+
+[[example]]
+name = "whale_watcher"
+path = "examples/whale_watcher.rs"
+required-features = ["telegram-alerts"]
+
+[[example]]
+name = "multi_pair_monitor"
+path = "examples/multi_pair_monitor.rs"
+required-features = ["market-data", "analytics"]
+
+[[example]]
+name = "liquidity_monitor"
+path = "examples/liquidity_monitor.rs"
+required-features = ["analytics"]
+
+[[example]]
+name = "simple_price_alerts"
+path = "examples/simple_price_alerts.rs"
+required-features = ["telegram-alerts"]
+
+[[example]]
+name = "telegram_trading_bot"
+path = "examples/telegram_trading_bot.rs"
+required-features = ["telegram", "trading"]
+
+[[example]]
+name = "telegram_trading_demo"
+path = "examples/telegram_trading_demo.rs"
+required-features = ["telegram", "trading"]
+
+[[example]]
+name = "export_to_csv"
+path = "examples/export_to_csv.rs"
+required-features = ["trades", "analytics"]

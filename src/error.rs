@@ -219,6 +219,10 @@ pub enum KrakyError {
     /// Invalid trading pair
     #[error("Invalid trading pair: {0}")]
     InvalidPair(String),
+
+    /// Generic API error
+    #[error("API error: {0}")]
+    Api(String),
 }
 
 impl KrakyError {

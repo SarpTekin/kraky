@@ -79,20 +79,21 @@ impl SubscriptionStats {
 /// Use `stats()` to monitor dropped messages.
 /// 
 /// # Example
-/// 
+///
 /// ```no_run
 /// use kraky::KrakyClient;
-/// 
+/// use futures_util::StreamExt;
+///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let client = KrakyClient::connect().await?;
-/// let mut trades = client.subscribe_trades("BTC/USD").await?;
-/// 
-/// while let Some(trade) = trades.next().await {
-///     println!("Trade: {} @ {}", trade.qty, trade.price);
+/// let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+///
+/// while let Some(update) = orderbook.next().await {
+///     println!("Orderbook update: {:?}", update.data[0].symbol);
 /// }
-/// 
+///
 /// // Check for dropped messages
-/// println!("Dropped: {} ({:.2}%)", trades.stats().dropped(), trades.stats().drop_rate());
+/// println!("Dropped: {} ({:.2}%)", orderbook.stats().dropped(), orderbook.stats().drop_rate());
 /// # Ok(())
 /// # }
 /// ```
@@ -209,12 +210,16 @@ impl<T> SubscriptionSender<T> {
 /// Manager for multiple subscriptions
 pub(crate) struct SubscriptionManager {
     /// Active orderbook subscriptions
+    #[cfg(feature = "orderbook")]
     pub orderbook: Vec<SubscriptionSender<crate::models::OrderbookUpdate>>,
     /// Active trade subscriptions
+    #[cfg(feature = "trades")]
     pub trades: Vec<SubscriptionSender<crate::models::Trade>>,
     /// Active ticker subscriptions
+    #[cfg(feature = "ticker")]
     pub ticker: Vec<SubscriptionSender<crate::models::Ticker>>,
     /// Active OHLC subscriptions
+    #[cfg(feature = "ohlc")]
     pub ohlc: Vec<SubscriptionSender<crate::models::OHLC>>,
 }
 
@@ -228,9 +233,13 @@ impl SubscriptionManager {
     /// Create a new subscription manager
     pub fn new() -> Self {
         Self {
+            #[cfg(feature = "orderbook")]
             orderbook: Vec::new(),
+            #[cfg(feature = "trades")]
             trades: Vec::new(),
+            #[cfg(feature = "ticker")]
             ticker: Vec::new(),
+            #[cfg(feature = "ohlc")]
             ohlc: Vec::new(),
         }
     }
@@ -238,13 +247,18 @@ impl SubscriptionManager {
     /// Clean up closed subscriptions
     #[allow(dead_code)]
     pub fn cleanup(&mut self) {
+        #[cfg(feature = "orderbook")]
         self.orderbook.retain(|s| !s.is_closed());
+        #[cfg(feature = "trades")]
         self.trades.retain(|s| !s.is_closed());
+        #[cfg(feature = "ticker")]
         self.ticker.retain(|s| !s.is_closed());
+        #[cfg(feature = "ohlc")]
         self.ohlc.retain(|s| !s.is_closed());
     }
 
     /// Dispatch orderbook update to relevant subscriptions
+    #[cfg(feature = "orderbook")]
     pub fn dispatch_orderbook(&self, update: &crate::models::OrderbookUpdate) {
         for data in &update.data {
             for sub in &self.orderbook {
@@ -256,6 +270,7 @@ impl SubscriptionManager {
     }
 
     /// Dispatch trade to relevant subscriptions
+    #[cfg(feature = "trades")]
     pub fn dispatch_trade(&self, update: &crate::models::TradeUpdate) {
         for data in &update.data {
             let trade = data.to_trade();
@@ -268,6 +283,7 @@ impl SubscriptionManager {
     }
 
     /// Dispatch ticker to relevant subscriptions
+    #[cfg(feature = "ticker")]
     pub fn dispatch_ticker(&self, update: &crate::models::TickerUpdate) {
         for data in &update.data {
             let ticker = data.to_ticker();
@@ -280,6 +296,7 @@ impl SubscriptionManager {
     }
 
     /// Dispatch OHLC to relevant subscriptions
+    #[cfg(feature = "ohlc")]
     pub fn dispatch_ohlc(&self, update: &crate::models::OHLCUpdate) {
         for data in &update.data {
             let ohlc = data.to_ohlc();

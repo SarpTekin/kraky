@@ -19,3 +19,4 @@
 ARCHITECTURE.md
 docs/*.md
 benchmark_*.txt
+*.csv

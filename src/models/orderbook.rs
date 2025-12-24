@@ -141,13 +141,16 @@ pub struct Orderbook {
     /// Sequence number for ordering
     pub sequence: u64,
     /// Last checksum from Kraken (for validation)
+    #[cfg(feature = "checksum")]
     #[serde(default)]
     pub last_checksum: u32,
     /// Whether the last checksum validation passed
+    #[cfg(feature = "checksum")]
     #[serde(default = "default_checksum_valid")]
     pub checksum_valid: bool,
 }
 
+#[cfg(feature = "checksum")]
 fn default_checksum_valid() -> bool {
     true
 }
@@ -191,7 +194,9 @@ impl Orderbook {
             asks: BTreeMap::new(),
             timestamp: String::new(),
             sequence: 0,
+            #[cfg(feature = "checksum")]
             last_checksum: 0,
+            #[cfg(feature = "checksum")]
             checksum_valid: true,
         }
     }
@@ -219,7 +224,8 @@ impl Orderbook {
             }
         }
 
-        // Validate checksum if provided
+        // Validate checksum if provided (only when checksum feature is enabled)
+        #[cfg(feature = "checksum")]
         if data.checksum != 0 {
             self.last_checksum = data.checksum;
             self.checksum_valid = self.validate_checksum(data.checksum);
@@ -234,9 +240,20 @@ impl Orderbook {
     /// # Returns
     /// 
     /// `true` if the checksum is valid (or not provided), `false` if corrupted.
+    /// Always returns `true` when the `checksum` feature is disabled.
+    #[cfg(feature = "checksum")]
     pub fn apply_update_validated(&mut self, data: &OrderbookData) -> bool {
         self.apply_update(data);
         self.checksum_valid
+    }
+
+    /// Apply an update and return whether the checksum is valid
+    /// 
+    /// When the `checksum` feature is disabled, this always returns `true`.
+    #[cfg(not(feature = "checksum"))]
+    pub fn apply_update_validated(&mut self, data: &OrderbookData) -> bool {
+        self.apply_update(data);
+        true
     }
 
     /// Get top N bid levels (highest prices first)
@@ -302,77 +319,93 @@ impl Orderbook {
         self.asks.values().sum()
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // ANALYTICS (requires 'analytics' feature)
+    // ═══════════════════════════════════════════════════════════════════════
+
     /// Calculate orderbook imbalance ratio
-    /// 
+    ///
     /// Returns a value between -1.0 and 1.0:
     /// - Positive values indicate more bid pressure (bullish)
     /// - Negative values indicate more ask pressure (bearish)
     /// - 0.0 indicates balanced orderbook
-    /// 
+    ///
     /// Formula: (bid_volume - ask_volume) / (bid_volume + ask_volume)
+    ///
+    /// Only available when the `analytics` feature is enabled.
+    #[cfg(feature = "analytics")]
     pub fn imbalance(&self) -> f64 {
         let bid_vol = self.total_bid_volume();
         let ask_vol = self.total_ask_volume();
         let total = bid_vol + ask_vol;
-        
+
         if total == 0.0 {
             return 0.0;
         }
-        
+
         (bid_vol - ask_vol) / total
     }
 
     /// Calculate imbalance for top N levels only
-    /// 
+    ///
     /// This is often more useful as it focuses on the most liquid
     /// levels near the spread where actual trading happens.
+    ///
+    /// Only available when the `analytics` feature is enabled.
+    #[cfg(feature = "analytics")]
     pub fn imbalance_top_n(&self, n: usize) -> f64 {
         let bid_vol: f64 = self.bids.iter().rev().take(n).map(|(_, qty)| qty).sum();
         let ask_vol: f64 = self.asks.iter().take(n).map(|(_, qty)| qty).sum();
         let total = bid_vol + ask_vol;
-        
+
         if total == 0.0 {
             return 0.0;
         }
-        
+
         (bid_vol - ask_vol) / total
     }
 
     /// Calculate volume-weighted imbalance within a price range
-    /// 
+    ///
     /// `depth_percent` specifies how far from mid price to include (e.g., 0.01 = 1%)
+    ///
+    /// Only available when the `analytics` feature is enabled.
+    #[cfg(feature = "analytics")]
     pub fn imbalance_within_depth(&self, depth_percent: f64) -> Option<f64> {
         let mid = self.mid_price()?;
         let lower_bound = mid * (1.0 - depth_percent);
         let upper_bound = mid * (1.0 + depth_percent);
-        
+
         let bid_vol: f64 = self.bids
             .iter()
             .filter(|(price, _)| price.0 >= lower_bound)
             .map(|(_, qty)| qty)
             .sum();
-        
+
         let ask_vol: f64 = self.asks
             .iter()
             .filter(|(price, _)| price.0 <= upper_bound)
             .map(|(_, qty)| qty)
             .sum();
-        
+
         let total = bid_vol + ask_vol;
-        
+
         if total == 0.0 {
             return Some(0.0);
         }
-        
+
         Some((bid_vol - ask_vol) / total)
     }
 
     /// Get detailed imbalance metrics
+    ///
+    /// Only available when the `analytics` feature is enabled.
+    #[cfg(feature = "analytics")]
     pub fn imbalance_metrics(&self) -> ImbalanceMetrics {
         let bid_vol = self.total_bid_volume();
         let ask_vol = self.total_ask_volume();
         let total = bid_vol + ask_vol;
-        
+
         ImbalanceMetrics {
             bid_volume: bid_vol,
             ask_volume: ask_vol,
@@ -394,6 +427,9 @@ impl Orderbook {
     /// 2. For each level: format price and qty by removing decimal point and leading zeros
     /// 3. Concatenate: asks first (price+qty for each), then bids
     /// 4. Calculate CRC32 of the resulting string
+    /// 
+    /// Only available when the `checksum` feature is enabled.
+    #[cfg(feature = "checksum")]
     pub fn calculate_checksum(&self) -> u32 {
         let mut data = String::new();
         
@@ -416,6 +452,8 @@ impl Orderbook {
     /// 
     /// Returns `true` if the checksum matches, `false` if corrupted.
     /// 
+    /// Only available when the `checksum` feature is enabled.
+    /// 
     /// # Example
     /// 
     /// ```ignore
@@ -424,11 +462,15 @@ impl Orderbook {
     ///     client.reconnect()?;
     /// }
     /// ```
+    #[cfg(feature = "checksum")]
     pub fn validate_checksum(&self, expected: u32) -> bool {
         self.calculate_checksum() == expected
     }
 
     /// Validate checksum and return detailed result
+    /// 
+    /// Only available when the `checksum` feature is enabled.
+    #[cfg(feature = "checksum")]
     pub fn checksum_validation(&self, expected: u32) -> ChecksumValidation {
         let calculated = self.calculate_checksum();
         ChecksumValidation {
@@ -444,6 +486,7 @@ impl Orderbook {
     /// 
     /// Removes decimal point and leading zeros.
     /// Example: 0.00123400 -> "123400", 50000.0 -> "500000"
+    #[cfg(feature = "checksum")]
     fn format_for_checksum(value: f64) -> String {
         // Format with enough precision to capture all significant digits
         let formatted = format!("{:.10}", value);
@@ -464,7 +507,14 @@ impl Orderbook {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ANALYTICS TYPES
+// ═══════════════════════════════════════════════════════════════════════
+
 /// Detailed orderbook imbalance metrics
+///
+/// Only available when the `analytics` feature is enabled.
+#[cfg(feature = "analytics")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImbalanceMetrics {
     /// Total bid volume
@@ -481,6 +531,7 @@ pub struct ImbalanceMetrics {
     pub ask_levels: usize,
 }
 
+#[cfg(feature = "analytics")]
 impl ImbalanceMetrics {
     /// Returns true if there's significant buy pressure (imbalance > threshold)
     pub fn is_bullish(&self, threshold: f64) -> bool {
@@ -493,7 +544,7 @@ impl ImbalanceMetrics {
     }
 
     /// Returns a simple signal based on imbalance
-    /// 
+    ///
     /// - `threshold`: minimum absolute imbalance to generate a signal (e.g., 0.1 = 10%)
     pub fn signal(&self, threshold: f64) -> ImbalanceSignal {
         if self.imbalance_ratio > threshold {
@@ -507,6 +558,9 @@ impl ImbalanceMetrics {
 }
 
 /// Simple signal derived from orderbook imbalance
+///
+/// Only available when the `analytics` feature is enabled.
+#[cfg(feature = "analytics")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImbalanceSignal {
     /// More bid volume than ask volume
@@ -518,6 +572,9 @@ pub enum ImbalanceSignal {
 }
 
 /// Result of checksum validation
+/// 
+/// Only available when the `checksum` feature is enabled.
+#[cfg(feature = "checksum")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChecksumValidation {
     /// Expected checksum from Kraken
@@ -532,6 +589,7 @@ pub struct ChecksumValidation {
     pub ask_count: usize,
 }
 
+#[cfg(feature = "checksum")]
 impl ChecksumValidation {
     /// Returns true if the orderbook data is valid (checksums match)
     pub fn is_valid(&self) -> bool {
@@ -544,6 +602,7 @@ impl ChecksumValidation {
     }
 }
 
+#[cfg(feature = "checksum")]
 impl std::fmt::Display for ChecksumValidation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.valid {
@@ -776,6 +835,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "analytics")]
     fn test_orderbook_imbalance_bullish() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -808,6 +868,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "analytics")]
     fn test_orderbook_imbalance_bearish() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -838,6 +899,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "analytics")]
     fn test_orderbook_imbalance_neutral() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -862,6 +924,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "analytics")]
     fn test_orderbook_imbalance_top_n() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -893,6 +956,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "checksum")]
     fn test_checksum_format_for_checksum() {
         // Test the format_for_checksum helper
         assert_eq!(Orderbook::format_for_checksum(50000.0), "5");
@@ -902,6 +966,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "checksum")]
     fn test_checksum_calculate() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -944,6 +1009,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "checksum")]
     fn test_checksum_validation() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         
@@ -982,6 +1048,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "checksum")]
     fn test_checksum_in_apply_update() {
         let mut ob = Orderbook::new("BTC/USD".to_string());
         

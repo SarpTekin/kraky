@@ -60,10 +60,10 @@ impl std::fmt::Display for TradeSide {
     }
 }
 
-/// Order type for a trade
+/// Order type for a trade (market or limit)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum OrderType {
+pub enum TradeOrderType {
     /// Market order
     Market,
     /// Limit order
@@ -82,7 +82,7 @@ pub struct Trade {
     /// Trade quantity
     pub qty: f64,
     /// Order type
-    pub ord_type: OrderType,
+    pub ord_type: TradeOrderType,
     /// Trade ID
     pub trade_id: i64,
     /// Timestamp
@@ -103,7 +103,7 @@ pub struct TradeDataRaw {
     #[serde(deserialize_with = "deserialize_number")]
     pub qty: f64,
     /// Order type
-    pub ord_type: OrderType,
+    pub ord_type: TradeOrderType,
     /// Trade ID
     pub trade_id: i64,
     /// Timestamp

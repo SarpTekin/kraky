@@ -229,28 +229,39 @@ pub enum KrakyMessage {
         error: Option<String>,
     },
     /// Orderbook update
+    #[cfg(feature = "orderbook")]
     Orderbook(crate::models::OrderbookUpdate),
     /// Trade update
+    #[cfg(feature = "trades")]
     Trade(crate::models::TradeUpdate),
     /// Ticker update
+    #[cfg(feature = "ticker")]
     Ticker(crate::models::TickerUpdate),
     /// OHLC update
+    #[cfg(feature = "ohlc")]
     OHLC(crate::models::OHLCUpdate),
     /// Unknown message
     Unknown(serde_json::Value),
 }
 
 impl KrakyMessage {
-    /// Parse a raw JSON message using SIMD-accelerated parsing when available
+    /// Parse a raw JSON message
+    /// 
+    /// Uses SIMD-accelerated parsing when the `simd` feature is enabled.
     pub fn parse(text: &str) -> Result<Self, serde_json::Error> {
-        // Use SIMD-accelerated JSON parsing for better performance
-        // simd-json requires mutable bytes, so we copy the input
-        let mut bytes = text.as_bytes().to_vec();
-        let value: serde_json::Value = simd_json::from_slice(&mut bytes)
-            .map_err(|e| serde_json::Error::io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                e.to_string()
-            )))?;
+        // Parse JSON - use SIMD if feature is enabled
+        #[cfg(feature = "simd")]
+        let value: serde_json::Value = {
+            let mut bytes = text.as_bytes().to_vec();
+            simd_json::from_slice(&mut bytes)
+                .map_err(|e| serde_json::Error::io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    e.to_string()
+                )))?
+        };
+        
+        #[cfg(not(feature = "simd"))]
+        let value: serde_json::Value = serde_json::from_str(text)?;
         
         // Check for method responses (pong, subscribe, unsubscribe)
         if let Some(method) = value.get("method").and_then(|m| m.as_str()) {
@@ -294,18 +305,22 @@ impl KrakyMessage {
                 "heartbeat" => {
                     return Ok(KrakyMessage::Heartbeat);
                 }
+                #[cfg(feature = "orderbook")]
                 "book" => {
                     let update: crate::models::OrderbookUpdate = serde_json::from_value(value)?;
                     return Ok(KrakyMessage::Orderbook(update));
                 }
+                #[cfg(feature = "trades")]
                 "trade" => {
                     let update: crate::models::TradeUpdate = serde_json::from_value(value)?;
                     return Ok(KrakyMessage::Trade(update));
                 }
+                #[cfg(feature = "ticker")]
                 "ticker" => {
                     let update: crate::models::TickerUpdate = serde_json::from_value(value)?;
                     return Ok(KrakyMessage::Ticker(update));
                 }
+                #[cfg(feature = "ohlc")]
                 "ohlc" => {
                     let update: crate::models::OHLCUpdate = serde_json::from_value(value)?;
                     return Ok(KrakyMessage::OHLC(update));

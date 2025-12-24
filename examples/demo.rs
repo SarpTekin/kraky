@@ -211,21 +211,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ticker_stats.delivered(), ticker_stats.dropped(), ticker_stats.drop_rate());
 
     // ═══════════════════════════════════════════════════════════════════════
-    // FEATURE 7: Orderbook Checksum Validation
+    // FEATURE 7: Orderbook Checksum Validation (requires 'checksum' feature)
     // ═══════════════════════════════════════════════════════════════════════
-    println!("\n═══════════════════════════════════════════════════════════════");
-    println!("  FEATURE 7: Orderbook Checksum Validation (CRC32)");
-    println!("═══════════════════════════════════════════════════════════════\n");
+    #[cfg(feature = "checksum")]
+    {
+        println!("\n═══════════════════════════════════════════════════════════════");
+        println!("  FEATURE 7: Orderbook Checksum Validation (CRC32)");
+        println!("═══════════════════════════════════════════════════════════════\n");
 
-    if let Some(ob) = client.get_orderbook("BTC/USD") {
-        let checksum = ob.calculate_checksum();
-        println!("   Calculated Checksum: 0x{:08X}", checksum);
-        println!("   Last Checksum:       0x{:08X}", ob.last_checksum);
-        println!("   Checksum Valid:      {}", if ob.checksum_valid { "✅ Yes" } else { "❌ No" });
-        
-        // Show validation helper
-        let is_valid = client.is_orderbook_valid("BTC/USD");
-        println!("   is_orderbook_valid(): {:?}", is_valid);
+        if let Some(ob) = client.get_orderbook("BTC/USD") {
+            let checksum = ob.calculate_checksum();
+            println!("   Calculated Checksum: 0x{:08X}", checksum);
+            println!("   Last Checksum:       0x{:08X}", ob.last_checksum);
+            println!("   Checksum Valid:      {}", if ob.checksum_valid { "✅ Yes" } else { "❌ No" });
+            
+            // Show validation helper
+            let is_valid = client.is_orderbook_valid("BTC/USD");
+            println!("   is_orderbook_valid(): {:?}", is_valid);
+        }
+    }
+    
+    #[cfg(not(feature = "checksum"))]
+    {
+        println!("\n═══════════════════════════════════════════════════════════════");
+        println!("  FEATURE 7: Orderbook Checksum Validation");
+        println!("═══════════════════════════════════════════════════════════════\n");
+        println!("   ⚠️  Checksum feature not enabled.");
+        println!("   Enable with: cargo run --example demo --features checksum");
     }
 
     // ═══════════════════════════════════════════════════════════════════════

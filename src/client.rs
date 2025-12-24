@@ -2,8 +2,16 @@
 
 use crate::error::{KrakyError, Result};
 use crate::messages::{KrakyMessage, PingRequest, SubscribeRequest, KRAKEN_WS_URL};
-use crate::models::{Interval, OHLC, Orderbook, OrderbookUpdate, Ticker, Trade};
 use crate::subscriptions::{Subscription, SubscriptionManager, SubscriptionSender};
+
+#[cfg(feature = "orderbook")]
+use crate::models::{Orderbook, OrderbookUpdate};
+#[cfg(feature = "trades")]
+use crate::models::Trade;
+#[cfg(feature = "ticker")]
+use crate::models::Ticker;
+#[cfg(feature = "ohlc")]
+use crate::models::{Interval, OHLC};
 
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::RwLock;
@@ -21,6 +29,9 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, warn};
 
 /// Connection event emitted by the client
+///
+/// Only available when the `events` feature is enabled.
+#[cfg(feature = "events")]
 #[derive(Debug, Clone)]
 pub enum ConnectionEvent {
     /// Successfully connected
@@ -64,6 +75,9 @@ impl From<u8> for ConnectionState {
 }
 
 /// Configuration for automatic reconnection
+///
+/// Only available when the `reconnect` feature is enabled.
+#[cfg(feature = "reconnect")]
 #[derive(Debug, Clone)]
 pub struct ReconnectConfig {
     /// Whether to automatically reconnect on disconnect
@@ -78,6 +92,7 @@ pub struct ReconnectConfig {
     pub max_attempts: Option<u32>,
 }
 
+#[cfg(feature = "reconnect")]
 impl Default for ReconnectConfig {
     fn default() -> Self {
         Self {
@@ -90,6 +105,7 @@ impl Default for ReconnectConfig {
     }
 }
 
+#[cfg(feature = "reconnect")]
 impl ReconnectConfig {
     /// Create a config with reconnection disabled
     pub fn disabled() -> Self {
@@ -131,11 +147,16 @@ impl ReconnectConfig {
 }
 
 /// Stored subscription info for re-subscription after reconnect
+#[cfg(feature = "reconnect")]
 #[derive(Debug, Clone)]
 enum StoredSubscription {
+    #[cfg(feature = "orderbook")]
     Orderbook { pair: String, depth: u32 },
+    #[cfg(feature = "trades")]
     Trades { pair: String },
+    #[cfg(feature = "ticker")]
     Ticker { pair: String },
+    #[cfg(feature = "ohlc")]
     OHLC { pair: String, interval: u32 },
 }
 
@@ -150,6 +171,9 @@ enum Command {
     Shutdown,
     /// Trigger reconnection
     Reconnect,
+    /// Send a raw JSON message (for trading, etc.)
+    #[cfg(feature = "trading")]
+    RawMessage(String),
 }
 
 /// Kraken WebSocket client
@@ -181,18 +205,22 @@ pub struct KrakyClient {
     /// Subscription manager
     subscriptions: Arc<RwLock<SubscriptionManager>>,
     /// Managed orderbooks
+    #[cfg(feature = "orderbook")]
     orderbooks: Arc<RwLock<HashMap<String, Orderbook>>>,
     /// Connection state (lock-free atomic)
     state: Arc<AtomicU8>,
     /// Reconnection configuration
+    #[cfg(feature = "reconnect")]
     reconnect_config: Arc<ReconnectConfig>,
     /// Stored subscriptions for re-subscription after reconnect
+    #[cfg(feature = "reconnect")]
     stored_subscriptions: Arc<RwLock<Vec<StoredSubscription>>>,
     /// URL for reconnection
     url: Arc<String>,
     /// Shutdown flag
     shutdown: Arc<AtomicBool>,
     /// Connection event broadcaster
+    #[cfg(feature = "events")]
     event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>>,
 }
 
@@ -223,6 +251,7 @@ impl KrakyClient {
         let reconnect_config = Arc::new(reconnect_config);
         let stored_subscriptions = Arc::new(RwLock::new(Vec::new()));
         let subscriptions = Arc::new(RwLock::new(SubscriptionManager::new()));
+        #[cfg(feature = "orderbook")]
         let orderbooks = Arc::new(RwLock::new(HashMap::new()));
         let (command_tx, command_rx) = tokio::sync::mpsc::unbounded_channel();
         let event_tx: Arc<RwLock<Option<mpsc::Sender<ConnectionEvent>>>> = Arc::new(RwLock::new(None));
@@ -235,6 +264,7 @@ impl KrakyClient {
         // Spawn the connection manager task
         let manager = ConnectionManager {
             subscriptions: Arc::clone(&subscriptions),
+            #[cfg(feature = "orderbook")]
             orderbooks: Arc::clone(&orderbooks),
             state: Arc::clone(&state),
             reconnect_config: Arc::clone(&reconnect_config),
@@ -269,6 +299,7 @@ impl KrakyClient {
         Ok(Self {
             command_tx,
             subscriptions,
+            #[cfg(feature = "orderbook")]
             orderbooks,
             state,
             reconnect_config,
@@ -335,16 +366,18 @@ impl KrakyClient {
     }
 
     /// Subscribe to connection events
-    /// 
+    ///
     /// Returns a receiver that will receive connection state changes.
     /// Only one subscriber is supported at a time; calling this again
     /// replaces the previous subscriber.
-    /// 
+    ///
+    /// Only available when the `events` feature is enabled.
+    ///
     /// # Example
-    /// 
+    ///
     /// ```ignore
     /// let mut events = client.subscribe_events();
-    /// 
+    ///
     /// tokio::spawn(async move {
     ///     while let Some(event) = events.recv().await {
     ///         match event {
@@ -358,6 +391,7 @@ impl KrakyClient {
     ///     }
     /// });
     /// ```
+    #[cfg(feature = "events")]
     pub fn subscribe_events(&self) -> mpsc::Receiver<ConnectionEvent> {
         let (tx, rx) = mpsc::channel(100);
         *self.event_tx.write() = Some(tx);
@@ -365,15 +399,18 @@ impl KrakyClient {
     }
 
     /// Subscribe to orderbook updates for a trading pair
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `pair` - Trading pair symbol (e.g., "BTC/USD")
     /// * `depth` - Number of price levels (10, 25, 100, 500, or 1000)
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A subscription stream that yields orderbook updates
+    ///
+    /// Only available when the `orderbook` feature is enabled.
+    #[cfg(feature = "orderbook")]
     pub async fn subscribe_orderbook(
         &self,
         pair: &str,
@@ -412,6 +449,9 @@ impl KrakyClient {
     }
 
     /// Subscribe to trade updates for a trading pair
+    ///
+    /// Only available when the `trades` feature is enabled.
+    #[cfg(feature = "trades")]
     pub async fn subscribe_trades(&self, pair: &str) -> Result<Subscription<Trade>> {
         let (sender, subscription) = SubscriptionSender::new("trade".to_string(), pair.to_string());
 
@@ -437,6 +477,9 @@ impl KrakyClient {
     }
 
     /// Subscribe to ticker updates for a trading pair
+    ///
+    /// Only available when the `ticker` feature is enabled.
+    #[cfg(feature = "ticker")]
     pub async fn subscribe_ticker(&self, pair: &str) -> Result<Subscription<Ticker>> {
         let (sender, subscription) = SubscriptionSender::new("ticker".to_string(), pair.to_string());
 
@@ -462,6 +505,9 @@ impl KrakyClient {
     }
 
     /// Subscribe to OHLC (candlestick) updates for a trading pair
+    ///
+    /// Only available when the `ohlc` feature is enabled.
+    #[cfg(feature = "ohlc")]
     pub async fn subscribe_ohlc(
         &self,
         pair: &str,
@@ -502,6 +548,8 @@ impl KrakyClient {
     /// Returns `Some(true)` if the last checksum validation passed.
     /// Returns `Some(false)` if the orderbook might be corrupted.
     /// 
+    /// Only available when the `checksum` feature is enabled.
+    /// 
     /// # Example
     /// 
     /// ```ignore
@@ -510,6 +558,7 @@ impl KrakyClient {
     ///     client.reconnect()?;
     /// }
     /// ```
+    #[cfg(feature = "checksum")]
     pub fn is_orderbook_valid(&self, pair: &str) -> Option<bool> {
         self.orderbooks.read().get(pair).map(|ob| ob.checksum_valid)
     }
@@ -518,6 +567,9 @@ impl KrakyClient {
     /// 
     /// Returns the number of corrupted orderbooks found.
     /// If any are corrupted, a reconnection is triggered automatically.
+    /// 
+    /// Only available when the `checksum` feature is enabled.
+    #[cfg(feature = "checksum")]
     pub fn validate_orderbooks_and_reconnect(&self) -> Result<usize> {
         let corrupted: Vec<String> = self.orderbooks
             .read()
@@ -537,6 +589,217 @@ impl KrakyClient {
         }
 
         Ok(count)
+    }
+
+    // ============================================================================
+    // Trading Methods (requires 'trading' feature)
+    // ============================================================================
+
+    /// Place an order
+    ///
+    /// Requires authentication credentials to be set up.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use kraky::{OrderParams, Credentials};
+    ///
+    /// let creds = Credentials::new("api_key", "api_secret");
+    /// let order = OrderParams::market_buy("BTC/USD", 0.1);
+    /// let response = client.place_order(&creds, order).await?;
+    /// println!("Order placed: {}", response.order_id);
+    /// ```
+    #[cfg(feature = "trading")]
+    pub async fn place_order(
+        &self,
+        credentials: &crate::auth::Credentials,
+        params: crate::models::OrderParams,
+    ) -> Result<crate::models::OrderResponse> {
+        use crate::models::OrderResponse;
+
+        // Generate authentication token
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let token = credentials.generate_token(nonce)?;
+
+        // Build request message
+        let request = serde_json::json!({
+            "method": "add_order",
+            "params": {
+                "token": token,
+                "symbol": params.symbol,
+                "side": params.side,
+                "order_type": params.order_type,
+                "order_qty": params.order_qty,
+                "limit_price": params.limit_price,
+                "trigger_price": params.trigger_price,
+                "time_in_force": params.time_in_force,
+                "post_only": params.post_only,
+                "reduce_only": params.reduce_only,
+                "stp": params.stp,
+                "cl_ord_id": params.cl_ord_id,
+                "validate": params.validate,
+            }
+        });
+
+        // Send request and wait for response
+        // Note: This is a simplified implementation
+        // A full implementation would need proper response handling
+        self.command_tx
+            .send(Command::RawMessage(request.to_string()))
+            .map_err(|e| KrakyError::ChannelSend(e.to_string()))?;
+
+        // For now, return a placeholder
+        // A complete implementation would parse the actual response
+        Ok(OrderResponse {
+            order_id: "pending".to_string(),
+            cl_ord_id: params.cl_ord_id,
+            order_status: crate::models::OrderStatus::Pending,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+
+    /// Cancel an order by ID
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let response = client.cancel_order(&creds, "order-id-123").await?;
+    /// ```
+    #[cfg(feature = "trading")]
+    pub async fn cancel_order(
+        &self,
+        credentials: &crate::auth::Credentials,
+        order_id: impl Into<String>,
+    ) -> Result<crate::models::CancelOrderResponse> {
+        use crate::models::CancelOrderResponse;
+
+        let order_id = order_id.into();
+
+        // Generate authentication token
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let token = credentials.generate_token(nonce)?;
+
+        // Build request message
+        let request = serde_json::json!({
+            "method": "cancel_order",
+            "params": {
+                "token": token,
+                "order_id": [order_id.clone()],
+            }
+        });
+
+        // Send request
+        self.command_tx
+            .send(Command::RawMessage(request.to_string()))
+            .map_err(|e| KrakyError::ChannelSend(e.to_string()))?;
+
+        // Return placeholder
+        Ok(CancelOrderResponse {
+            order_id,
+            success: true,
+        })
+    }
+
+    /// Cancel all open orders
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let response = client.cancel_all_orders(&creds).await?;
+    /// println!("Cancelled {} orders", response.count);
+    /// ```
+    #[cfg(feature = "trading")]
+    pub async fn cancel_all_orders(
+        &self,
+        credentials: &crate::auth::Credentials,
+    ) -> Result<crate::models::CancelAllResponse> {
+        use crate::models::CancelAllResponse;
+
+        // Generate authentication token
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let token = credentials.generate_token(nonce)?;
+
+        // Build request message
+        let request = serde_json::json!({
+            "method": "cancel_all",
+            "params": {
+                "token": token,
+            }
+        });
+
+        // Send request
+        self.command_tx
+            .send(Command::RawMessage(request.to_string()))
+            .map_err(|e| KrakyError::ChannelSend(e.to_string()))?;
+
+        // Return placeholder
+        Ok(CancelAllResponse {
+            count: 0,
+        })
+    }
+
+    /// Amend (modify) an existing order
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use kraky::AmendOrderParams;
+    ///
+    /// let amend = AmendOrderParams {
+    ///     order_id: "order-123".to_string(),
+    ///     order_qty: Some(0.2),
+    ///     limit_price: Some(51000.0),
+    ///     trigger_price: None,
+    /// };
+    /// let response = client.amend_order(&creds, amend).await?;
+    /// ```
+    #[cfg(feature = "trading")]
+    pub async fn amend_order(
+        &self,
+        credentials: &crate::auth::Credentials,
+        params: crate::models::AmendOrderParams,
+    ) -> Result<crate::models::AmendOrderResponse> {
+        use crate::models::AmendOrderResponse;
+
+        // Generate authentication token
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let token = credentials.generate_token(nonce)?;
+
+        // Build request message
+        let request = serde_json::json!({
+            "method": "amend_order",
+            "params": {
+                "token": token,
+                "order_id": params.order_id.clone(),
+                "order_qty": params.order_qty,
+                "limit_price": params.limit_price,
+                "trigger_price": params.trigger_price,
+            }
+        });
+
+        // Send request
+        self.command_tx
+            .send(Command::RawMessage(request.to_string()))
+            .map_err(|e| KrakyError::ChannelSend(e.to_string()))?;
+
+        // Return placeholder
+        Ok(AmendOrderResponse {
+            order_id: params.order_id,
+            success: true,
+            error: None,
+        })
     }
 
     /// Disconnect from the WebSocket (lock-free)
@@ -570,6 +833,7 @@ impl Drop for KrakyClient {
 /// Connection manager that handles WebSocket messages and reconnection
 struct ConnectionManager {
     subscriptions: Arc<RwLock<SubscriptionManager>>,
+    #[cfg(feature = "orderbook")]
     orderbooks: Arc<RwLock<HashMap<String, Orderbook>>>,
     state: Arc<AtomicU8>,
     reconnect_config: Arc<ReconnectConfig>,
@@ -716,6 +980,7 @@ impl ConnectionManager {
         
         for sub in subs.iter() {
             let request = match sub {
+                #[cfg(feature = "orderbook")]
                 StoredSubscription::Orderbook { pair, depth } => {
                     // Reset orderbook state for fresh snapshot
                     {
@@ -726,12 +991,15 @@ impl ConnectionManager {
                     }
                     SubscribeRequest::orderbook(vec![pair.clone()], *depth)
                 }
+                #[cfg(feature = "trades")]
                 StoredSubscription::Trades { pair } => {
                     SubscribeRequest::trades(vec![pair.clone()])
                 }
+                #[cfg(feature = "ticker")]
                 StoredSubscription::Ticker { pair } => {
                     SubscribeRequest::ticker(vec![pair.clone()])
                 }
+                #[cfg(feature = "ohlc")]
                 StoredSubscription::OHLC { pair, interval } => {
                     SubscribeRequest::ohlc(vec![pair.clone()], *interval)
                 }
@@ -813,6 +1081,13 @@ impl ConnectionManager {
                         Some(Command::Reconnect) => {
                             return DisconnectReason::ManualReconnect;
                         }
+                        #[cfg(feature = "trading")]
+                        Some(Command::RawMessage(json)) => {
+                            debug!("Sending raw message: {}", json);
+                            if let Err(e) = write.send(Message::Text(json)).await {
+                                error!("Failed to send raw message: {}", e);
+                            }
+                        }
                         Some(Command::Shutdown) | None => {
                             return DisconnectReason::Shutdown;
                         }
@@ -866,6 +1141,7 @@ impl ConnectionManager {
                         warn!("Subscription failed for {}: unknown error", channel);
                     }
                 }
+                #[cfg(feature = "orderbook")]
                 KrakyMessage::Orderbook(update) => {
                     for data in &update.data {
                         let mut orderbooks = self.orderbooks.write();
@@ -875,12 +1151,15 @@ impl ConnectionManager {
                     }
                     self.subscriptions.read().dispatch_orderbook(&update);
                 }
+                #[cfg(feature = "trades")]
                 KrakyMessage::Trade(update) => {
                     self.subscriptions.read().dispatch_trade(&update);
                 }
+                #[cfg(feature = "ticker")]
                 KrakyMessage::Ticker(update) => {
                     self.subscriptions.read().dispatch_ticker(&update);
                 }
+                #[cfg(feature = "ohlc")]
                 KrakyMessage::OHLC(update) => {
                     self.subscriptions.read().dispatch_ohlc(&update);
                 }
