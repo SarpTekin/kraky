@@ -47,7 +47,7 @@
 //! - To enable real trading, set ENABLE_REAL_TRADING=true
 
 use kraky::{
-    AmendOrderParams, Credentials, KrakyClient, OrderParams, OrderSide, OrderType, TelegramNotifier,
+    AmendOrderParams, Credentials, KrakyClient, OrderParams, OrderSide, TelegramNotifier,
 };
 
 #[tokio::main]
