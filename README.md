@@ -199,6 +199,105 @@ tokio = { version = "1.35", features = ["full"] }
 
 Kraky uses **feature flags** to keep your binary lightweight. Only compile what you actually use!
 
+### 🏗️ Feature Architecture - Layered Design
+
+Kraky's features are organized in **layers**. Each layer builds on the previous one:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         🎯 LAYER 4: INTEGRATIONS                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  📱 telegram-alerts                                                     │  │
+│  │  ├─ Real-time Telegram notifications                                   │  │
+│  │  ├─ Orderbook imbalance alerts                                         │  │
+│  │  ├─ Whale detection (large orders)                                     │  │
+│  │  ├─ Price threshold alerts                                             │  │
+│  │  └─ Auto-includes: telegram + analytics + ticker                       │  │
+│  │                                                                         │  │
+│  │  📱 telegram (base)                                                     │  │
+│  │  └─ Basic Telegram bot integration (+800 KB, +1 dep: teloxide)         │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      💰 LAYER 3: TRADING & PRIVATE DATA                       │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  💰 trading                                                             │  │
+│  │  ├─ Place, cancel, amend orders via WebSocket                          │  │
+│  │  ├─ No REST API needed                                                 │  │
+│  │  └─ Auto-includes: auth + private (+3 KB)                              │  │
+│  │                                                                         │  │
+│  │  🔐 private                                                             │  │
+│  │  ├─ Balance updates (real-time account balances)                       │  │
+│  │  ├─ Order updates (open orders, fills, cancellations)                  │  │
+│  │  ├─ Execution updates (trade fills)                                    │  │
+│  │  └─ Auto-includes: auth (+0 KB)                                        │  │
+│  │                                                                         │  │
+│  │  🔑 auth (base authentication)                                         │  │
+│  │  └─ HMAC-SHA256 token generation (+50 KB, +3 deps: hmac,sha2,base64)  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      📈 LAYER 2: ANALYTICS & PERFORMANCE                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  📊 analytics                                                           │  │
+│  │  ├─ Orderbook imbalance detection                                      │  │
+│  │  ├─ Bullish/Bearish/Neutral signals                                    │  │
+│  │  ├─ Bid/Ask volume metrics                                             │  │
+│  │  └─ Requires: orderbook (+25 KB, 0 deps)                               │  │
+│  │                                                                         │  │
+│  │  ✅ checksum                                                            │  │
+│  │  ├─ CRC32 orderbook validation                                         │  │
+│  │  ├─ Detects data corruption                                            │  │
+│  │  └─ Requires: orderbook (+15 KB, +1 dep: crc32fast)                    │  │
+│  │                                                                         │  │
+│  │  ⚡ simd                                                                 │  │
+│  │  └─ SIMD-accelerated JSON (2-3x faster) (+100 KB, +15 deps)            │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        📊 LAYER 1: MARKET DATA TYPES                          │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  orderbook  ✓ (included in default)                                    │  │
+│  │  ├─ Real-time orderbook depth                                          │  │
+│  │  ├─ Managed state with auto-updates                                    │  │
+│  │  └─ Best bid/ask, spread, mid-price (+0 KB, 0 deps)                    │  │
+│  │                                                                         │  │
+│  │  trades (opt-in)                                                        │  │
+│  │  └─ Real-time trade execution stream (+50 KB, 0 deps)                  │  │
+│  │                                                                         │  │
+│  │  ticker (opt-in)                                                        │  │
+│  │  └─ Price, volume, 24h stats (+45 KB, 0 deps)                          │  │
+│  │                                                                         │  │
+│  │  ohlc (opt-in)                                                          │  │
+│  │  └─ Candlestick/OHLC data (+40 KB, 0 deps)                             │  │
+│  │                                                                         │  │
+│  │  📦 market-data (meta feature)                                          │  │
+│  │  └─ Includes: orderbook + trades + ticker + ohlc                       │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                       🔧 LAYER 0: CORE (ALWAYS INCLUDED)                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │  ✅ reconnect - Smart reconnection with exponential backoff             │  │
+│  │  ✅ events - Connection lifecycle event callbacks                       │  │
+│  │  ✅ orderbook - Orderbook depth subscription                            │  │
+│  │                                                                         │  │
+│  │  Base dependencies: tokio, serde, serde_json, futures-util,            │  │
+│  │                     native-tls, tokio-tungstenite, thiserror,           │  │
+│  │                     tracing, url, chrono, uuid, parking_lot (12 deps)  │  │
+│  │  Binary size: ~7.2 MB                                                  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### 🧭 Quick Decision Guide
 
 ```
@@ -327,31 +426,277 @@ kraky = { git = "...", features = ["trading"] }
 
 ---
 
-### 📱 Telegram Integration
+### 📱 Telegram Integration - Real-Time Trading Alerts
 
-Real-time notifications via Telegram bot:
+**Get instant notifications on your phone for market events, account activity, and trade execution!**
+
+Kraky's Telegram integration lets you build powerful alert bots that monitor markets 24/7 and notify you via Telegram when specific conditions are met.
+
+#### 🎯 What Can You Do With Telegram Integration?
+
+| Alert Type | Description | Example Use Case |
+|------------|-------------|------------------|
+| 🐋 **Whale Detection** | Detect large orders (>10 BTC) | "Alert me when a whale places a large buy order" |
+| 📊 **Imbalance Signals** | Bullish/Bearish orderbook signals | "Notify me when orderbook shows strong bullish signal" |
+| 💰 **Price Alerts** | Threshold-based price notifications | "Alert when BTC drops below $40,000" |
+| 📈 **Spread Monitoring** | Unusual spread volatility | "Notify when spread widens 3x normal" |
+| 💼 **Account Activity** | Balance/order/execution updates | "Alert when my order fills" |
+| 🎯 **Trade Execution** | Order placement confirmations | "Notify when my buy order is placed" |
+| 🔗 **Connection Events** | WebSocket connection status | "Alert me if connection drops" |
+
+#### 📦 Two Feature Levels
 
 | Feature | What You Get | Added Size | Requires |
 |---------|-------------|------------|----------|
 | `telegram` | Basic Telegram notifications | +800 KB | None |
-| `telegram-alerts` | Smart alerts with imbalance signals | +800 KB | `telegram` + `analytics` + `ticker` |
+| `telegram-alerts` | **Smart alerts** with imbalance signals, whale detection, spread monitoring | +800 KB | `telegram` + `analytics` + `ticker` |
 
 **Dependencies added:** +1 (`teloxide`)
+
+#### 🚀 Quick Start - Telegram Alerts in 3 Steps
+
+**Step 1: Create a Telegram Bot**
+
+1. Open Telegram and message [@BotFather](https://t.me/botfather)
+2. Send `/newbot` and follow instructions
+3. Save the **bot token** (looks like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+4. Get your **chat ID** by messaging [@userinfobot](https://t.me/userinfobot)
+
+**Step 2: Set Environment Variables**
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+export TELEGRAM_CHAT_ID="your_chat_id"
+```
+
+Or create a `.env` file (see [SETUP.md](SETUP.md)):
+
+```bash
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_CHAT_ID=your_chat_id
+```
+
+**Step 3: Build Your Alert Bot**
+
+```rust
+use kraky::{KrakyClient, TelegramNotifier, ImbalanceSignal};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load credentials
+    let bot_token = std::env::var("TELEGRAM_BOT_TOKEN")?;
+    let chat_id: i64 = std::env::var("TELEGRAM_CHAT_ID")?.parse()?;
+
+    // Initialize Kraky and Telegram
+    let client = KrakyClient::connect().await?;
+    let bot = TelegramNotifier::new(&bot_token, chat_id);
+
+    // Subscribe to BTC/USD orderbook
+    client.subscribe_orderbook("BTC/USD", 10).await?;
+
+    // Monitor for imbalance signals
+    loop {
+        if let Some(ob) = client.get_orderbook("BTC/USD") {
+            // Get imbalance signal
+            let signal = ob.imbalance_signal();
+
+            if signal == ImbalanceSignal::Bullish {
+                bot.send_message("🟢 BULLISH signal detected on BTC/USD!").await?;
+            } else if signal == ImbalanceSignal::Bearish {
+                bot.send_message("🔴 BEARISH signal detected on BTC/USD!").await?;
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    }
+
+    Ok(())
+}
+```
+
+#### 🎯 Real-World Examples
+
+**🐋 Whale Watcher Bot**
+
+Detects when large orders (>10 BTC) appear in the orderbook:
+
+```toml
+kraky = { git = "...", features = ["telegram-alerts"] }
+```
+
+```bash
+cargo run --example whale_watcher --features telegram-alerts
+```
+
+**Telegram Output:**
+```
+🐋 WHALE ALERT!
+Pair: BTC/USD
+Side: BID (buying)
+Size: 15.234 BTC
+Price: $42,150.00
+Value: $642,000
+```
+
+**📊 Imbalance Alert Bot**
+
+Monitors orderbook imbalance and sends signals:
+
+```bash
+cargo run --example telegram_imbalance_bot --features telegram-alerts
+```
+
+**Telegram Output:**
+```
+🟢 BULLISH SIGNAL
+Pair: BTC/USD
+Imbalance: +23.5%
+Bid Volume: 45.2 BTC
+Ask Volume: 34.6 BTC
+Signal Strength: Strong
+```
+
+**🔔 Price Alert Bot**
+
+Simple threshold-based price notifications:
+
+```bash
+cargo run --example simple_price_alerts --features telegram-alerts
+```
+
+**Telegram Output:**
+```
+💰 PRICE ALERT
+BTC/USD dropped below $40,000
+Current Price: $39,875.50
+24h Change: -3.2%
+```
+
+**💼 Private Account Alerts**
+
+Get notified about your account activity:
+
+```toml
+kraky = { git = "...", features = ["telegram", "private"] }
+```
+
+```bash
+cargo run --example telegram_private_alerts --features telegram,private
+```
+
+**Telegram Output:**
+```
+💰 BALANCE UPDATE
+BTC: 1.5432
+USD: $50,000.00
+ETH: 10.25
+
+📋 ORDER FILLED
+Order: O12345-ABCDE
+Pair: BTC/USD
+Side: Buy
+Filled: 0.5 BTC @ $42,000
+Status: Closed
+```
+
+**🎯 Trading Bot with Alerts**
+
+Place orders and get execution notifications:
+
+```toml
+kraky = { git = "...", features = ["telegram", "trading"] }
+```
+
+```bash
+cargo run --example telegram_trading_bot --features telegram,trading
+```
+
+**Telegram Output:**
+```
+✅ ORDER PLACED
+Order ID: O67890-FGHIJ
+Pair: BTC/USD
+Side: Buy
+Type: Limit
+Price: $41,500.00
+Quantity: 0.1 BTC
+
+💥 ORDER EXECUTED
+Execution ID: E12345
+Filled: 0.1 BTC @ $41,500.00
+Total Value: $4,150.00
+Liquidity: Maker
+```
+
+#### 🔧 Telegram API Reference
+
+```rust
+use kraky::TelegramNotifier;
+
+// Initialize
+let bot = TelegramNotifier::new(&bot_token, chat_id);
+
+// Send formatted message
+bot.send_message("🚀 Alert message").await?;
+
+// Send connection status
+bot.send_connection_status(true, "Connected to Kraken").await?;
+
+// Send imbalance alert
+bot.send_imbalance_alert(
+    "BTC/USD",
+    0.235,  // 23.5% imbalance
+    ImbalanceSignal::Bullish
+).await?;
+
+// Send price alert
+bot.send_price_alert(
+    "BTC/USD",
+    42150.50,
+    3.2,  // 24h change %
+).await?;
+```
+
+#### 🎛️ Telegram Feature Combinations
 
 ```toml
 # Basic Telegram notifications
 kraky = { git = "...", features = ["telegram"] }
 
-# Smart alerts with orderbook signals
+# Smart alerts with orderbook signals (RECOMMENDED)
 kraky = { git = "...", features = ["telegram-alerts"] }
 # Auto-includes: telegram, analytics, ticker
 
 # Telegram + Private account alerts
 kraky = { git = "...", features = ["telegram", "private"] }
 
-# Telegram + Trading alerts
+# Telegram + Trading alerts (full bot)
 kraky = { git = "...", features = ["telegram", "trading"] }
+
+# Everything (market data + trading + alerts)
+kraky = { git = "...", features = ["full"] }
 ```
+
+#### 💡 Why Use Telegram Integration?
+
+✅ **Never Miss Important Events** - Get notified 24/7 on your phone
+✅ **No UI Needed** - Monitor markets without building a frontend
+✅ **Lightweight** - Only +800 KB added to binary
+✅ **Production Ready** - Built on `teloxide`, the leading Rust Telegram library
+✅ **Modular** - Only compile when you need it with feature flags
+✅ **Multiple Alert Types** - Price, imbalance, whale detection, account activity
+✅ **Real-Time** - WebSocket-based, instant notifications
+
+#### 📚 More Examples
+
+See the `examples/` directory for complete working examples:
+
+- `telegram_imbalance_bot.rs` - Orderbook imbalance monitoring
+- `whale_watcher.rs` - Large order detection
+- `simple_price_alerts.rs` - Threshold-based price alerts
+- `telegram_private_alerts.rs` - Account activity notifications
+- `telegram_trading_bot.rs` - Full trading bot with execution alerts
+- `telegram_trading_demo.rs` - Demo mode (no credentials needed)
 
 ---
 
