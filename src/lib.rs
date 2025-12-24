@@ -155,12 +155,13 @@
 //!
 //!     loop {
 //!         if let Some(ob) = client.get_orderbook("BTC/USD") {
-//!             let signal = ob.imbalance_signal();
+//!             let metrics = ob.imbalance_metrics();
+//!             let signal = metrics.signal(0.1); // 10% threshold
 //!
 //!             if signal == ImbalanceSignal::Bullish {
-//!                 bot.send_message("🟢 BULLISH signal on BTC/USD!").await?;
+//!                 bot.send_imbalance_alert("BTC/USD", &metrics, signal).await?;
 //!             } else if signal == ImbalanceSignal::Bearish {
-//!                 bot.send_message("🔴 BEARISH signal on BTC/USD!").await?;
+//!                 bot.send_imbalance_alert("BTC/USD", &metrics, signal).await?;
 //!             }
 //!         }
 //!

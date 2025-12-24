@@ -38,7 +38,6 @@ use std::fs::File;
 use std::io::Write;
 
 struct PairExporter {
-    pair: String,
     orderbook_file: File,
     orderbook_count: usize,
 }
@@ -56,7 +55,6 @@ impl PairExporter {
         )?;
 
         Ok(Self {
-            pair: pair.to_string(),
             orderbook_file,
             orderbook_count: 0,
         })
