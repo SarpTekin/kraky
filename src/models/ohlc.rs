@@ -151,7 +151,8 @@ pub struct OHLCDataRaw {
     /// Volume (can be number or string from API)
     #[serde(deserialize_with = "deserialize_number")]
     pub volume: f64,
-    /// Number of trades
+    /// Number of trades (Kraken sends this as "trades")
+    #[serde(rename = "trades")]
     pub count: i64,
     /// Interval in minutes
     pub interval: u32,
