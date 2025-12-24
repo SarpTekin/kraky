@@ -1,9 +1,13 @@
 //! Kraky SDK Benchmark
 //!
 //! Measures latency and throughput of the SDK.
-//! Run with: cargo run --example benchmark --release
 //!
-//! Metrics tracked:
+//! ## Run
+//! ```bash
+//! cargo run --example benchmark --features trades,ticker --release
+//! ```
+//!
+//! ## Metrics tracked
 //! - Connection time
 //! - Message processing latency
 //! - Messages per second throughput
