@@ -91,24 +91,283 @@
 //! }
 //! ```
 //!
-//! ## Subscription Types
+//! ## Feature Examples
 //!
-//! ### Orderbook (enabled by default)
+//! ### Trades Stream (requires `trades` feature)
 //!
-//! Subscribe to orderbook depth updates with configurable depth levels
-//! (10, 25, 100, 500, or 1000 levels).
+//! Subscribe to real-time trade execution data with price, volume, and side information.
 //!
-//! ### Trades (requires `trades` feature)
+//! ```no_run
+//! # #[cfg(feature = "trades")]
+//! # {
+//! use kraky::KrakyClient;
+//! use futures_util::StreamExt;
 //!
-//! Subscribe to real-time trade execution data.
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut trades = client.subscribe_trades("BTC/USD").await?;
 //!
-//! ### Ticker (requires `ticker` feature)
+//!     while let Some(trade) = trades.next().await {
+//!         println!("{} - {} BTC @ ${} ({})",
+//!             trade.timestamp,
+//!             trade.qty,
+//!             trade.price,
+//!             if trade.side == kraky::TradeSide::Buy { "BUY" } else { "SELL" }
+//!         );
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
 //!
-//! Subscribe to ticker updates including bid/ask, volume, and price changes.
+//! ### Ticker Updates (requires `ticker` feature)
 //!
-//! ### OHLC (requires `ohlc` feature)
+//! Subscribe to ticker data including best bid/ask, last price, and 24h volume.
 //!
-//! Subscribe to candlestick data with configurable intervals.
+//! ```no_run
+//! # #[cfg(feature = "ticker")]
+//! # {
+//! use kraky::KrakyClient;
+//! use futures_util::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut ticker = client.subscribe_ticker("BTC/USD").await?;
+//!
+//!     while let Some(tick) = ticker.next().await {
+//!         println!("BTC/USD: ${} | Bid: ${} | Ask: ${} | 24h Vol: {} BTC",
+//!             tick.last,
+//!             tick.bid,
+//!             tick.ask,
+//!             tick.volume
+//!         );
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### OHLC Candlesticks (requires `ohlc` feature)
+//!
+//! Subscribe to candlestick data with configurable time intervals (1m, 5m, 15m, 1h, 1d, etc.).
+//!
+//! ```no_run
+//! # #[cfg(feature = "ohlc")]
+//! # {
+//! use kraky::{KrakyClient, Interval};
+//! use futures_util::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut ohlc = client.subscribe_ohlc("BTC/USD", Interval::Min5).await?;
+//!
+//!     while let Some(candle) = ohlc.next().await {
+//!         println!("5m Candle - O: ${} H: ${} L: ${} C: ${} Vol: {}",
+//!             candle.open,
+//!             candle.high,
+//!             candle.low,
+//!             candle.close,
+//!             candle.volume
+//!         );
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### Orderbook Analytics (requires `analytics` feature)
+//!
+//! Detect orderbook imbalances that indicate potential price movements. Unique to Kraky!
+//!
+//! ```no_run
+//! # #[cfg(feature = "analytics")]
+//! # {
+//! use kraky::{KrakyClient, ImbalanceSignal};
+//! use futures_util::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//!
+//!     while let Some(_update) = orderbook.next().await {
+//!         if let Some(ob) = client.get_orderbook("BTC/USD") {
+//!             let metrics = ob.imbalance_metrics();
+//!             let signal = metrics.signal(0.1); // 10% imbalance threshold
+//!
+//!             match signal {
+//!                 ImbalanceSignal::Bullish => {
+//!                     println!("🟢 BULLISH - Buy pressure: {:.2}%", metrics.imbalance_ratio * 100.0);
+//!                 }
+//!                 ImbalanceSignal::Bearish => {
+//!                     println!("🔴 BEARISH - Sell pressure: {:.2}%", metrics.imbalance_ratio.abs() * 100.0);
+//!                 }
+//!                 ImbalanceSignal::Neutral => {
+//!                     println!("⚪ NEUTRAL - Balanced orderbook");
+//!                 }
+//!             }
+//!         }
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### Checksum Validation (requires `checksum` feature)
+//!
+//! Validate orderbook data integrity using CRC32 checksums provided by Kraken.
+//!
+//! ```no_run
+//! # #[cfg(feature = "checksum")]
+//! # {
+//! use kraky::KrakyClient;
+//! use futures_util::StreamExt;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//!
+//!     while let Some(update) = orderbook.next().await {
+//!         if let Some(ob) = client.get_orderbook("BTC/USD") {
+//!             let expected_checksum = update.data[0].checksum;
+//!
+//!             // Validate checksum manually
+//!             if client.is_orderbook_valid("BTC/USD").unwrap_or(false) {
+//!                 println!("✓ Checksum valid: {}", expected_checksum);
+//!             } else {
+//!                 println!("✗ Checksum mismatch for {}", update.data[0].symbol);
+//!             }
+//!         }
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### SIMD Performance (requires `simd` feature)
+//!
+//! Enable SIMD-accelerated JSON parsing for 2-3x faster message processing.
+//!
+//! ```toml
+//! # Cargo.toml
+//! [dependencies]
+//! kraky = { version = "0.1", features = ["simd"] }
+//! ```
+//!
+//! No code changes needed - just enable the feature flag for automatic performance boost!
+//!
+//! ### Reconnection Configuration (requires `reconnect` feature - enabled by default)
+//!
+//! Customize automatic reconnection behavior with exponential backoff.
+//!
+//! ```no_run
+//! # #[cfg(feature = "reconnect")]
+//! # {
+//! use kraky::{KrakyClient, ReconnectConfig};
+//! use std::time::Duration;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let config = ReconnectConfig {
+//!         enabled: true,
+//!         initial_delay: Duration::from_secs(1),
+//!         max_delay: Duration::from_secs(60),
+//!         backoff_multiplier: 2.0,
+//!         max_attempts: Some(10),
+//!     };
+//!
+//!     let client = KrakyClient::connect_with_config("wss://ws.kraken.com/v2", config).await?;
+//!     // Client will automatically reconnect using your config
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### Connection Events (requires `events` feature - enabled by default)
+//!
+//! Monitor connection lifecycle with event callbacks for connected, disconnected, and reconnection states.
+//!
+//! ```no_run
+//! # #[cfg(feature = "events")]
+//! # {
+//! use kraky::{KrakyClient, ConnectionEvent};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let client = KrakyClient::connect().await?;
+//!     let mut events = client.subscribe_events();
+//!
+//!     while let Some(event) = events.recv().await {
+//!         match event {
+//!             ConnectionEvent::Connected => println!("✓ Connected to Kraken"),
+//!             ConnectionEvent::Disconnected(reason) => {
+//!                 println!("✗ Disconnected: {:?}", reason);
+//!             }
+//!             ConnectionEvent::Reconnecting(attempt) => {
+//!                 println!("⟳ Reconnecting... (attempt {})", attempt);
+//!             }
+//!             ConnectionEvent::Reconnected => println!("✓ Reconnected to Kraken"),
+//!             ConnectionEvent::ReconnectFailed(attempt, err) => {
+//!                 println!("✗ Reconnect failed (attempt {}): {}", attempt, err);
+//!             }
+//!             ConnectionEvent::ReconnectExhausted => {
+//!                 println!("✗ Reconnection attempts exhausted");
+//!             }
+//!         }
+//!     }
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! ### WebSocket Trading (requires `trading` feature)
+//!
+//! Place and manage orders entirely via WebSocket - no REST API needed.
+//!
+//! ```no_run
+//! # #[cfg(feature = "trading")]
+//! # {
+//! use kraky::{KrakyClient, Credentials, OrderParams, OrderSide};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let api_key = std::env::var("KRAKEN_API_KEY")?;
+//!     let api_secret = std::env::var("KRAKEN_API_SECRET")?;
+//!     let credentials = Credentials::new(api_key, api_secret);
+//!
+//!     let client = KrakyClient::connect().await?;
+//!
+//!     // Place a limit buy order for 0.001 BTC at $50,000
+//!     let order = OrderParams {
+//!         symbol: "BTC/USD".to_string(),
+//!         side: OrderSide::Buy,
+//!         order_type: kraky::OrderType::Limit,
+//!         order_qty: Some(0.001),
+//!         limit_price: Some(50000.0),
+//!         trigger_price: None,
+//!         time_in_force: None,
+//!         post_only: None,
+//!         reduce_only: None,
+//!         stp: None,
+//!         cl_ord_id: None,
+//!         validate: None,
+//!     };
+//!
+//!     let response = client.place_order(&credentials, order).await?;
+//!     println!("Order placed! ID: {}", response.order_id);
+//!
+//!     // Cancel the order
+//!     client.cancel_order(&credentials, &response.order_id).await?;
+//!     println!("Order cancelled!");
+//!
+//!     Ok(())
+//! }
+//! # }
+//! ```
 //!
 //! ## Telegram Integration
 //!

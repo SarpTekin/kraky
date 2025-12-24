@@ -39,10 +39,10 @@
 //! The client maintains connection state and provides real-time status:
 //!
 //! ```no_run
-//! # use kraky::KrakyClient;
+//! # use kraky::{KrakyClient, ConnectionState};
 //! # async fn example(client: &KrakyClient) {
 //! let state = client.connection_state();
-//! if state.is_connected() {
+//! if state == ConnectionState::Connected {
 //!     println!("Connected to Kraken");
 //! }
 //! # }
@@ -67,7 +67,7 @@
 //!     max_attempts: Some(10),
 //! };
 //!
-//! let client = KrakyClient::connect_with_config(config).await?;
+//! let client = KrakyClient::connect_with_config("wss://ws.kraken.com/v2", config).await?;
 //! # Ok(())
 //! # }
 //! # }

@@ -48,9 +48,9 @@
 //!
 //! // Check backpressure stats
 //! let stats = orderbook.stats();
-//! println!("Delivered: {}", stats.delivered);
-//! println!("Dropped: {}", stats.dropped);
-//! println!("Drop rate: {:.2}%", stats.drop_rate() * 100.0);
+//! println!("Delivered: {}", stats.delivered());
+//! println!("Dropped: {}", stats.dropped());
+//! println!("Drop rate: {:.2}%", stats.drop_rate());
 //! # Ok(())
 //! # }
 //! # }
