@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configuration
     let trading_pair = "BTC/USD";
-    let whale_threshold_btc = 10.0; // Orders >= 10 BTC are "whales"
+    let whale_threshold_btc = 1.0; // Orders >= 10 BTC are "whales"
     let check_interval = Duration::from_secs(5);
 
     println!("⚙️  Configuration:");

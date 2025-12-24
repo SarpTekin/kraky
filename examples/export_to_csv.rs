@@ -18,7 +18,7 @@
 //!
 //! ## Setup
 //! ```bash
-//! cargo run --example export_to_csv --features analytics
+//! cargo run --example export_to_csv --features trades,analytics
 //! ```
 //!
 //! ## Output Files
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ═══════════════════════════════════════════════════════════════════════
 
     let symbol = "BTC/USD";
-    let duration_secs = 30; // Export for 30 seconds
+    let duration_secs = 5; // Export for 30 seconds
 
     println!("⚙️  Configuration:");
     println!("   Symbol: {}", symbol);
