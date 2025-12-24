@@ -7,6 +7,77 @@ A lightweight, high-performance Rust SDK for connecting to the [Kraken Exchange]
 
 ---
 
+## 🎯 About Kraky
+
+### The Problem
+
+Building trading applications with cryptocurrency exchange WebSocket APIs is complex and error-prone. Developers must manually handle WebSocket connections, parse incremental orderbook updates, manage reconnection logic, and maintain state synchronization. Kraken's WebSocket API v2, while powerful, requires significant boilerplate code and careful state management to use effectively. Most existing solutions are either too heavyweight, lack proper async support, or don't provide advanced features like orderbook imbalance detection.
+
+### What We Built
+
+**Kraky** is a lightweight, production-ready Rust SDK that provides a clean, type-safe interface to the Kraken Exchange WebSocket API v2. It abstracts away the complexity of WebSocket connection management, automatic orderbook reconstruction from incremental updates, and provides unique features like **orderbook imbalance detection** for trading signal generation. Built with Rust's async ecosystem (Tokio), Kraky offers modular feature flags allowing developers to compile only what they need—from a minimal 7.2 MB binary for basic orderbook streaming to a full-featured 8.5 MB binary with analytics, authentication, and Telegram alert integration.
+
+### Key Features
+
+- **🔄 Smart Reconnection** - Automatic reconnection with exponential backoff, connection lifecycle events, and state preservation
+- **📊 Managed Orderbook State** - Automatic reconstruction from incremental updates with CRC32 checksum validation
+- **📈 Orderbook Imbalance Detection** - Proprietary algorithm for bullish/bearish signal generation based on bid/ask volume ratios
+- **🤖 Telegram Integration** - Real-time trading alerts on your phone with whale detection, price thresholds, and imbalance signals
+- **🔐 WebSocket Trading** - Place, cancel, and manage orders entirely via WebSocket (no REST API needed)
+- **⚡ Modular Feature Flags** - Compile only what you need: orderbook-only (7.2 MB) to full-featured (8.5 MB)
+- **🎯 Type-Safe API** - Strongly typed models for all Kraken message types with zero-copy parsing
+
+### Technical Highlights
+
+Kraky leverages **Rust's async ecosystem** (Tokio) for efficient concurrent I/O and uses **feature flags** to achieve binary size optimization—data types like trades and ticker add only 40-50 KB each. The SDK implements a **managed orderbook** using a `BTreeMap` for O(log n) insertions and deletions while maintaining price-level ordering. Our **imbalance detection algorithm** calculates bid/ask volume ratios at configurable depth levels and generates trading signals when imbalance exceeds thresholds. For authentication, we implement **HMAC-SHA256 signing** for Kraken's WebSocket v2 auth tokens. The architecture uses **bounded channels** for backpressure control, preventing memory issues under high message throughput. Optional **SIMD-accelerated JSON parsing** provides 2-3x performance improvement for high-frequency scenarios.
+
+### How It Works
+
+**Installation:**
+```toml
+[dependencies]
+kraky = { git = "https://github.com/SarpTekin/kraky" }
+tokio = { version = "1.35", features = ["full"] }
+```
+
+**Basic Usage:**
+```rust
+use kraky::KrakyClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Connect to Kraken WebSocket
+    let client = KrakyClient::connect().await?;
+
+    // Subscribe to BTC/USD orderbook
+    let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+
+    // Process updates
+    while let Some(update) = orderbook.next().await {
+        // Access managed orderbook state
+        if let Some(ob) = client.get_orderbook("BTC/USD") {
+            println!("Best bid: {:?}, Best ask: {:?}",
+                ob.best_bid(), ob.best_ask());
+            println!("Imbalance: {:.2}%", ob.imbalance() * 100.0);
+        }
+    }
+    Ok(())
+}
+```
+
+**Advanced Features (Telegram Alerts, Trading, Private Channels):**
+See [SETUP.md](SETUP.md) for credential configuration.
+
+### Demo & Documentation
+
+- **📹 Live Demo** - Run `cargo run --example demo --features full` (no credentials needed!)
+- **📊 19 Working Examples** - From basic orderbook to advanced trading bots
+- **📱 Telegram Bots** - Whale detection, imbalance alerts, price notifications
+- **✅ 69 Tests Passing** - 47 unit tests + 22 doctests
+- **📚 Comprehensive Docs** - Every feature documented with examples
+
+---
+
 ## 🏆 For Hackathon Judges
 
 **Quick test in under 2 minutes:**
@@ -38,20 +109,20 @@ cargo run --example multi_subscribe --features trades,ticker  # Multiple subscri
 cargo run --example benchmark --features orderbook,trades     # Performance benchmark
 
 # Advanced examples:
-cargo run --example whale_watcher --features telegram-alerts              # 🐋 Whale detection
+cargo run --example whale_watcher --features telegram-alerts              # 🐋 Whale detection (needs Telegram credentials - see SETUP.md)
 cargo run --example liquidity_monitor --features analytics                # 💧 Liquidity tracking
 cargo run --example multi_pair_monitor --features market-data,analytics   # 📊 Multi-pair dashboard
-cargo run --example simple_price_alerts --features telegram-alerts        # 🔔 Price alerts
-cargo run --example telegram_imbalance_bot --features telegram-alerts     # 🤖 Imbalance bot
+cargo run --example simple_price_alerts --features telegram-alerts        # 🔔 Price alerts (needs Telegram credentials - see SETUP.md)
+cargo run --example telegram_imbalance_bot --features telegram-alerts     # 🤖 Imbalance bot (needs Telegram credentials - see SETUP.md)
 cargo run --example export_to_csv --features trades,analytics             # 📊 Export to CSV files
 
-# Authentication examples (requires API credentials):
+# Authentication examples (requires API credentials - see SETUP.md):
 cargo run --example auth_example --features private                       # 🔐 Authentication
 cargo run --example telegram_private_alerts --features telegram,private   # 📱 Private alerts
 
 # Trading examples:
 cargo run --example telegram_trading_demo --features telegram,trading     # 🎯 Trading demo (NO credentials needed!)
-cargo run --example telegram_trading_bot --features telegram,trading      # 💰 Full trading bot (requires API credentials)
+cargo run --example telegram_trading_bot --features telegram,trading      # 💰 Full trading bot (requires API credentials - see SETUP.md)
 ```
 
 ### What You'll See
@@ -390,7 +461,9 @@ kraky = { git = "...", features = ["analytics", "checksum"] }
 
 ### 🔐 Authentication & Private Data
 
-Access your account data and trade via WebSocket:
+Access your account data and trade via WebSocket.
+
+**📝 Setup Required:** See [SETUP.md](SETUP.md) for credential configuration (API keys).
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -431,6 +504,8 @@ kraky = { git = "...", features = ["trading"] }
 **Get instant notifications on your phone for market events, account activity, and trade execution!**
 
 Kraky's Telegram integration lets you build powerful alert bots that monitor markets 24/7 and notify you via Telegram when specific conditions are met.
+
+**📝 Setup Required:** See [SETUP.md](SETUP.md) for Telegram bot token and chat ID configuration.
 
 #### 🎯 What Can You Do With Telegram Integration?
 
@@ -955,7 +1030,9 @@ loop {
 
 ## Authentication & Private Channels
 
-Access private WebSocket channels for account data using HMAC-SHA256 authentication:
+Access private WebSocket channels for account data using HMAC-SHA256 authentication.
+
+**📝 Setup Required:** See [SETUP.md](SETUP.md) for detailed instructions on obtaining and configuring Kraken API credentials.
 
 ### Setup Credentials
 
@@ -1051,6 +1128,8 @@ See `examples/telegram_private_alerts.rs` for a complete bot that sends Telegram
 - Order status updates
 - Trade executions
 - Portfolio summaries
+
+**📝 Setup Required:** See [SETUP.md](SETUP.md) for instructions on obtaining these credentials.
 
 ```bash
 export KRAKEN_API_KEY="your_api_key"
