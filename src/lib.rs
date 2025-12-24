@@ -292,7 +292,7 @@
 //!
 //! ## Examples
 //!
-//! The repository includes 19 working examples:
+//! The repository includes 18 working examples:
 //!
 //! **Basic (No Credentials):**
 //! - `orderbook.rs` - Orderbook depth

@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Examples
 
-Kraky includes **19 working examples**:
+Kraky includes **18 working examples**:
 
 **Basic (No Credentials):**
 - `orderbook.rs` - Orderbook depth updates
@@ -178,7 +178,7 @@ See [examples/](examples/) directory for all examples.
 
 - **📚 API Documentation**: [docs.rs/kraky](https://docs.rs/kraky) - Complete API reference
 - **🔧 Setup Guide**: [SETUP.md](SETUP.md) - Telegram and Kraken API credentials
-- **💡 Examples**: [examples/](examples/) - 19 working examples with explanations
+- **💡 Examples**: [examples/](examples/) - 18 working examples with explanations
 
 ---
 

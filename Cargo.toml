@@ -174,11 +174,6 @@ path = "examples/telegram_trading_bot.rs"
 required-features = ["telegram", "trading"]
 
 [[example]]
-name = "telegram_trading_demo"
-path = "examples/telegram_trading_demo.rs"
-required-features = ["telegram", "trading"]
-
-[[example]]
 name = "export_to_csv"
 path = "examples/export_to_csv.rs"
 required-features = ["trades", "analytics"]

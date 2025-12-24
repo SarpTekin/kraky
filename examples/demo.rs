@@ -26,7 +26,7 @@
 //! ## Additional Features (Not in this demo)
 //! For examples of other features, see:
 //! - **Telegram alerts**: `telegram_imbalance_bot.rs`, `simple_price_alerts.rs`
-//! - **WebSocket trading**: `telegram_trading_bot.rs`, `telegram_trading_demo.rs`
+//! - **WebSocket trading**: `telegram_trading_bot.rs`
 //! - **Private channels**: `auth_example.rs`, `telegram_private_alerts.rs`
 //! - **CSV export**: `export_to_csv.rs`, `export_multi_csv.rs`
 

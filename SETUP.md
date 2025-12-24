@@ -83,7 +83,6 @@ Required for examples:
 - `telegram_imbalance_bot`
 - `telegram_private_alerts`
 - `telegram_trading_bot`
-- `telegram_trading_demo`
 
 ### Step 1: Create a Telegram Bot
 
@@ -337,7 +336,6 @@ cargo run --example simple_price_alerts --features telegram-alerts
 cargo run --example whale_watcher --features telegram-alerts
 cargo run --example telegram_imbalance_bot --features telegram-alerts,analytics
 cargo run --example telegram_private_alerts --features telegram-alerts,private
-cargo run --example telegram_trading_demo --features telegram,trading
 ```
 
 ### Telegram + Kraken Required 🔐
