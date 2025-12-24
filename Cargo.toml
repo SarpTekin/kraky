@@ -2,13 +2,25 @@
 name = "kraky"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.70"
 license = "MIT"
-authors = ["Kraken Forge Hackathon"]
-description = "A lightweight Rust SDK for Kraken Exchange WebSocket API"
+authors = ["Sarp Tekin <sarp@kraky.dev>"]
+description = "Lightweight, production-ready Rust SDK for Kraken Exchange WebSocket API v2 with unique orderbook imbalance detection and WebSocket trading"
+documentation = "https://docs.rs/kraky"
+homepage = "https://github.com/sarptekin/kraky"
 repository = "https://github.com/sarptekin/kraky"
 keywords = ["kraken", "exchange", "websocket", "trading", "crypto"]
-categories = ["api-bindings", "asynchronous"]
+categories = ["api-bindings", "asynchronous", "web-programming"]
 readme = "README.md"
+exclude = [
+    "*.csv",
+    ".env*",
+    "!.env.example",
+    "PRESENTATION*.md",
+    "PROJECT_SUMMARY.md",
+    "VIDEO_RECORDING_GUIDE.md",
+    "SUBMISSION*.md",
+]
 
 [features]
 # Default: core features (reconnect + events + orderbook)
