@@ -1,4 +1,91 @@
-//! Subscription stream handling with backpressure control
+//! Subscription stream handling with backpressure control.
+//!
+//! This module provides the [`Subscription`] type, which represents a stream of updates
+//! from a Kraken WebSocket channel. Subscriptions implement the `Stream` trait from
+//! `futures` and can be used with async/await.
+//!
+//! # Backpressure Control
+//!
+//! Subscriptions use **bounded channels** to prevent memory issues during high message throughput.
+//! If your application cannot process messages fast enough, messages will be dropped and
+//! you can monitor the drop rate using [`SubscriptionStats`].
+//!
+//! Default buffer size: 1000 messages
+//!
+//! # Example Usage
+//!
+//! ```no_run
+//! # #[cfg(feature = "orderbook")]
+//! # {
+//! use kraky::KrakyClient;
+//! use futures_util::StreamExt;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = KrakyClient::connect().await?;
+//!
+//! // Create a subscription
+//! let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//!
+//! // Process messages as they arrive
+//! while let Some(update) = orderbook.next().await {
+//!     println!("Received update: {:?}", update);
+//! }
+//! # Ok(())
+//! # }
+//! # }
+//! ```
+//!
+//! # Monitoring Backpressure
+//!
+//! ```no_run
+//! # #[cfg(feature = "orderbook")]
+//! # {
+//! use kraky::KrakyClient;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = KrakyClient::connect().await?;
+//! let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//!
+//! // Check backpressure stats
+//! let stats = orderbook.stats();
+//! println!("Delivered: {}", stats.delivered);
+//! println!("Dropped: {}", stats.dropped);
+//! println!("Drop rate: {:.2}%", stats.drop_rate() * 100.0);
+//! # Ok(())
+//! # }
+//! # }
+//! ```
+//!
+//! # Concurrent Subscriptions
+//!
+//! You can have multiple active subscriptions simultaneously:
+//!
+//! ```no_run
+//! # #[cfg(all(feature = "orderbook", feature = "trades"))]
+//! # {
+//! use kraky::KrakyClient;
+//! use futures_util::StreamExt;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = KrakyClient::connect().await?;
+//!
+//! let mut btc_orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//! let mut btc_trades = client.subscribe_trades("BTC/USD").await?;
+//!
+//! // Process both streams concurrently
+//! loop {
+//!     tokio::select! {
+//!         Some(ob) = btc_orderbook.next() => {
+//!             println!("Orderbook: {:?}", ob);
+//!         }
+//!         Some(trade) = btc_trades.next() => {
+//!             println!("Trade: {:?}", trade);
+//!         }
+//!     }
+//! }
+//! # }
+//! # }
+//! ```
 
 use crate::error::{KrakyError, Result};
 use futures_util::Stream;

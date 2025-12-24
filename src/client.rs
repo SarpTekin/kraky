@@ -1,4 +1,77 @@
-//! Kraken WebSocket client
+//! Kraken WebSocket client implementation.
+//!
+//! This module provides the main [`KrakyClient`] for connecting to Kraken's WebSocket API v2
+//! and managing subscriptions to market data, private channels, and trading.
+//!
+//! # Features
+//!
+//! - **Automatic connection management** - Handles connection lifecycle
+//! - **Smart reconnection** - Exponential backoff with configurable parameters (requires `reconnect` feature)
+//! - **Connection events** - Subscribe to lifecycle events (requires `events` feature)
+//! - **Managed orderbook state** - Automatically maintained from incremental updates
+//! - **Multiple subscriptions** - Subscribe to multiple channels concurrently
+//! - **Backpressure control** - Bounded channels prevent memory issues
+//!
+//! # Quick Start
+//!
+//! ```no_run
+//! use kraky::KrakyClient;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Connect to Kraken WebSocket
+//!     let client = KrakyClient::connect().await?;
+//!
+//!     // Subscribe to BTC/USD orderbook
+//!     let mut orderbook = client.subscribe_orderbook("BTC/USD", 10).await?;
+//!
+//!     // Process updates
+//!     while let Some(update) = orderbook.next().await {
+//!         println!("Orderbook update: {:?}", update);
+//!     }
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Connection States
+//!
+//! The client maintains connection state and provides real-time status:
+//!
+//! ```no_run
+//! # use kraky::KrakyClient;
+//! # async fn example(client: &KrakyClient) {
+//! let state = client.connection_state();
+//! if state.is_connected() {
+//!     println!("Connected to Kraken");
+//! }
+//! # }
+//! ```
+//!
+//! # Reconnection Configuration
+//!
+//! Customize reconnection behavior (requires `reconnect` feature):
+//!
+//! ```no_run
+//! # #[cfg(feature = "reconnect")]
+//! # {
+//! use kraky::{KrakyClient, ReconnectConfig};
+//! use std::time::Duration;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = ReconnectConfig {
+//!     enabled: true,
+//!     initial_delay: Duration::from_millis(500),
+//!     max_delay: Duration::from_secs(30),
+//!     backoff_multiplier: 2.0,
+//!     max_attempts: Some(10),
+//! };
+//!
+//! let client = KrakyClient::connect_with_config(config).await?;
+//! # Ok(())
+//! # }
+//! # }
+//! ```
 
 use crate::error::{KrakyError, Result};
 use crate::messages::{KrakyMessage, PingRequest, SubscribeRequest, KRAKEN_WS_URL};
